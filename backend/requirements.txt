@@ -1,0 +1,9 @@
+# Dependencias básicas de la Fase 1 para el backend
+fastapi==0.115.0
+uvicorn==0.32.0
+pydantic==2.9.0
+pydantic-settings==2.6.0
+pymongo==4.6.3
+motor==3.4.0
+dnspython==2.4.2
+certifi==2026.1.4

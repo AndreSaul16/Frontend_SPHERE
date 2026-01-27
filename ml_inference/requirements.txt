@@ -1,0 +1,5 @@
+# Dependencias básicas de la Fase 1 para el motor de IA
+fastapi
+uvicorn
+requests
+pydantic
