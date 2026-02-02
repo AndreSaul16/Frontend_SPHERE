@@ -232,7 +232,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const agent = allAgents.find(a => a.id === targetId);
             const title = agent ? `Chat con ${agent.name}` : 'Nueva Sesión';
 
-            const newSession = await chatService.createSession(title);
+            const newSession = await chatService.createSession(
+                title,
+                agent?.role || 'CEO',
+                null // Metadata is empty for now until UI is added
+            );
             const sessionId = newSession.session_id;
 
             set((state) => ({

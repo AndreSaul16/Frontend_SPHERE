@@ -20,8 +20,17 @@ export interface Message {
     agentId?: string; // Si es null, es del sistema o usuario
 }
 
+export interface SessionMetadata {
+    override_name?: string;
+    override_avatar?: string;
+    override_color?: string;
+    override_role_label?: string;
+}
+
 export interface ChatSession {
     session_id: string;
     title: string;
     created_at: string;
+    base_agent_id?: string;
+    metadata?: SessionMetadata;
 }

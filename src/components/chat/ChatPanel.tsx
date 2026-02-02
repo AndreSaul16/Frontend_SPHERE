@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 import { useAgentAvatars } from "@/hooks/useAgentAvatars";
 
 export function ChatPanel() {
-    const { sessionId } = useParams<{ sessionId: string }>();
+    const { sessionId: urlSessionId } = useParams<{ sessionId: string }>();
     const {
+        sessions,
         currentSessionId,
         selectedAgentId,
         getAgents,
@@ -18,6 +19,7 @@ export function ChatPanel() {
         loadSession,
         getCurrentMessages
     } = useChatStore();
+
     const messages = getCurrentMessages();
     const agents = getAgents();
     const avatars = useAgentAvatars();
@@ -26,12 +28,26 @@ export function ChatPanel() {
 
     const isTyping = currentSessionId ? streamingSessionIds.includes(currentSessionId) : false;
     const activeAgent = agents.find(a => a.id === selectedAgentId);
+    const currentSession = sessions.find(s => s.session_id === currentSessionId);
+
     const isGroupChat = selectedAgentId === 'group-chat';
     const groupMembers = getGroupMembers(agents);
-    const customAvatar = selectedAgentId ? avatars[selectedAgentId] : null;
+    const customAvatarFromHook = selectedAgentId ? avatars[selectedAgentId] : null;
+
+    // Priorizar Avatar de la sesión
+    const sessionAvatar = currentSession?.metadata?.override_avatar;
 
     const getAgentDisplayInfo = (agent: typeof activeAgent) => {
         if (!agent) return { baseName: 'SPHERE Engine', role: 'CORE' };
+
+        // Overrides desde la sesión
+        const overrideName = currentSession?.metadata?.override_name;
+        const overrideRole = currentSession?.metadata?.override_role_label;
+
+        if (overrideName) {
+            return { baseName: overrideName, role: overrideRole || agent.role };
+        }
+
         const match = agent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/);
         if (match) {
             return { baseName: match[1].trim(), role: match[2] };
@@ -40,6 +56,19 @@ export function ChatPanel() {
     };
 
     const { baseName, role } = getAgentDisplayInfo(activeAgent);
+
+    const getAvatarContent = () => {
+        if (sessionAvatar) {
+            return <img src={sessionAvatar} alt={activeAgent?.name} className="h-full w-full object-cover" />;
+        }
+        if (customAvatarFromHook) {
+            return <img src={customAvatarFromHook} alt={activeAgent?.name} className="h-full w-full object-cover" />;
+        }
+        if (isGroupChat) {
+            return <span className="text-xl">🏛️</span>;
+        }
+        return <span className={cn("font-black text-xl", activeAgent?.color)}>{activeAgent?.avatar || 'S'}</span>;
+    };
 
     const handleSendMessage = () => {
         if (!inputValue.trim()) return;
@@ -55,10 +84,10 @@ export function ChatPanel() {
     };
 
     useEffect(() => {
-        if (sessionId && sessionId !== currentSessionId) {
-            loadSession(sessionId);
+        if (urlSessionId && urlSessionId !== currentSessionId) {
+            loadSession(urlSessionId);
         }
-    }, [sessionId]);
+    }, [urlSessionId]);
 
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const [isNearBottom, setIsNearBottom] = useState(true);
@@ -90,13 +119,7 @@ export function ChatPanel() {
                                 isGroupChat ? "bg-gradient-to-tr from-luxury-purple via-electric-cyan to-blue-500" : "bg-white/5"
                             )}
                         >
-                            {customAvatar ? (
-                                <img src={customAvatar} alt={activeAgent?.name} className="h-full w-full object-cover" />
-                            ) : isGroupChat ? (
-                                <span className="text-xl">🏛️</span>
-                            ) : (
-                                <span className={cn("font-black text-xl", activeAgent?.color)}>{activeAgent?.avatar || 'S'}</span>
-                            )}
+                            {getAvatarContent()}
                         </motion.div>
                         <motion.div
                             initial={{ scale: 0 }}

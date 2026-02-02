@@ -72,8 +72,12 @@ export function Sidebar() {
                                             : "border-transparent"
                                     )}
                                 >
-                                    <div className="h-8 w-8 rounded-lg bg-surface border border-surface-highlight flex items-center justify-center flex-shrink-0 text-text-secondary group-hover:text-electric-cyan transition-colors">
-                                        <div className="text-[10px]">💬</div>
+                                    <div className="h-8 w-8 rounded-lg bg-surface border border-surface-highlight flex items-center justify-center flex-shrink-0 text-text-secondary group-hover:text-electric-cyan transition-colors overflow-hidden">
+                                        {session.metadata?.override_avatar ? (
+                                            <img src={session.metadata.override_avatar} alt="" className="h-full w-full object-cover" />
+                                        ) : (
+                                            <div className="text-[10px]">💬</div>
+                                        )}
                                     </div>
                                     <div className="text-left flex-1 min-w-0">
                                         <p className={cn(

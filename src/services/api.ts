@@ -160,11 +160,15 @@ export const chatService = {
     /**
      * Gestión de Sesiones
      */
-    async createSession(title?: string): Promise<any> {
+    async createSession(title?: string, baseAgentId?: string, metadata?: any): Promise<any> {
         const response = await fetch(`${API_URL}/sessions/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title })
+            body: JSON.stringify({
+                title,
+                base_agent_id: baseAgentId,
+                metadata
+            })
         });
         if (!response.ok) {
             throw new Error(`Error creating session: ${response.status} ${response.statusText}`);
