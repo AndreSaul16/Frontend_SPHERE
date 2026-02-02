@@ -1,0 +1,6 @@
+node_modules
+dist
+.git
+# .env (Removido para permitir visibilidad en desarrollo)
+.DS_Store
+coverage
