@@ -1,20 +1,21 @@
-# Usamos una imagen ligera de Node, ya que usaremos React (Node.js)
+# Usamos una imagen ligera de Node.js
 FROM node:20-alpine
 
-# Establecemos el directorio de trabajo
+# Directorio de trabajo
 WORKDIR /app
 
-# Copiamos el archivo de dependencias (necesario para el build)
-COPY package.json .
+# Copiamos los archivos de dependencias primero para aprovechar el caché
+COPY package*.json ./
 
-# Instalamos dependencias (aunque sea un placeholder)
+# Instalamos dependencias
 RUN npm install
 
-# Creamos un archivo principal vacío para satisfacer el COPY.
-RUN echo "{}" > index.html
+# Copiamos el resto del código
+COPY . .
 
-# Exponemos el puerto que usará React en desarrollo
+# Exponemos el puerto de Vite
 EXPOSE 3000
 
-# Comando de inicio: por ahora, solo mantiene vivo el contenedor
-CMD ["sleep", "infinity"]
+# Comando por defecto para desarrollo
+# --host 0.0.0.0 es necesario para que sea accesible desde fuera del contenedor
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
