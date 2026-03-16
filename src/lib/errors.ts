@@ -5,12 +5,19 @@
 export type ErrorContext = 'fetch_agents' | 'create_session' | 'send_message' | 'load_history' | 'artifact_parser' | 'core_engine';
 
 export class SphereError extends Error {
+    public message: string;
+    public context: ErrorContext;
+    public originalError?: any;
+
     constructor(
-        public message: string,
-        public context: ErrorContext,
-        public originalError?: any
+        message: string,
+        context: ErrorContext,
+        originalError?: any
     ) {
         super(message);
+        this.message = message;
+        this.context = context;
+        this.originalError = originalError;
         this.name = 'SphereError';
     }
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check, Download, ExternalLink } from 'lucide-react';
-import { motion } from 'framer-motion';
+
 import { getDownloadExtension } from '@/types/artifact';
 import type { Artifact } from '@/types/artifact';
 

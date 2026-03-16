@@ -1,13 +1,13 @@
 import { useRef, useState, useEffect } from "react";
-import { Send, Paperclip, MoreVertical, Zap, ShieldCheck } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { Send, Square, Paperclip, MoreVertical, Zap, ShieldCheck } from "lucide-react";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChatStore, getGroupMembers } from "@/store/useChatStore";
 import { MessageBubble } from "./MessageBubble";
 import { cn } from "@/lib/utils";
-import { useAgentAvatars } from "@/hooks/useAgentAvatars";
 
 export function ChatPanel() {
+    const navigate = useNavigate();
     const { sessionId: urlSessionId } = useParams<{ sessionId: string }>();
     const {
         sessions,
@@ -15,14 +15,15 @@ export function ChatPanel() {
         selectedAgentId,
         getAgents,
         sendMessage,
+        stopGeneration,
         streamingSessionIds,
         loadSession,
-        getCurrentMessages
+        getCurrentMessages,
+        toggleAgentModal
     } = useChatStore();
 
     const messages = getCurrentMessages();
     const agents = getAgents();
-    const avatars = useAgentAvatars();
     const [inputValue, setInputValue] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -32,20 +33,24 @@ export function ChatPanel() {
 
     const isGroupChat = selectedAgentId === 'group-chat';
     const groupMembers = getGroupMembers(agents);
-    const customAvatarFromHook = selectedAgentId ? avatars[selectedAgentId] : null;
+
+    // Color efectivo: priorizar bubble_color de sesión > color de sesión > hexColor del agente
+    const effectiveBubbleColor = currentSession?.visual_config?.bubble_color
+        || currentSession?.visual_config?.color
+        || activeAgent?.hexColor;
 
     // Priorizar Avatar de la sesión
-    const sessionAvatar = currentSession?.metadata?.override_avatar;
+    const sessionAvatar = currentSession?.visual_config?.avatar;
 
     const getAgentDisplayInfo = (agent: typeof activeAgent) => {
         if (!agent) return { baseName: 'SPHERE Engine', role: 'CORE' };
 
         // Overrides desde la sesión
-        const overrideName = currentSession?.metadata?.override_name;
-        const overrideRole = currentSession?.metadata?.override_role_label;
+        const overrideName = currentSession?.visual_config?.name;
+        const overrideRole = agent.role; // Actualmente no guardamos override_role en visual_config del backend, usamos el del agente
 
         if (overrideName) {
-            return { baseName: overrideName, role: overrideRole || agent.role };
+            return { baseName: overrideName, role: overrideRole };
         }
 
         const match = agent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/);
@@ -60,9 +65,6 @@ export function ChatPanel() {
     const getAvatarContent = () => {
         if (sessionAvatar) {
             return <img src={sessionAvatar} alt={activeAgent?.name} className="h-full w-full object-cover" />;
-        }
-        if (customAvatarFromHook) {
-            return <img src={customAvatarFromHook} alt={activeAgent?.name} className="h-full w-full object-cover" />;
         }
         if (isGroupChat) {
             return <span className="text-xl">🏛️</span>;
@@ -106,6 +108,79 @@ export function ChatPanel() {
         }
     }, [messages, isTyping, isNearBottom]);
 
+    // ── Welcome Screen: sin sesión activa ──
+    if (!currentSessionId && !urlSessionId) {
+        return (
+            <div className="flex flex-col h-full bg-transparent relative overflow-hidden">
+                <div className="flex-1 flex items-center justify-center p-6">
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6, ease: "easeOut" }}
+                        className="flex flex-col items-center text-center space-y-8 max-w-md"
+                    >
+                        {/* Logo / Icono central */}
+                        <div className="relative">
+                            <div className="absolute inset-0 bg-electric-cyan/10 blur-[60px] rounded-full animate-pulse" />
+                            <div className="absolute inset-0 bg-luxury-purple/10 blur-[80px] rounded-full animate-pulse [animation-delay:1s]" />
+                            <motion.div
+                                animate={{ rotate: [0, 5, -5, 0] }}
+                                transition={{ repeat: Infinity, duration: 6, ease: "easeInOut" }}
+                                className="relative h-28 w-28 rounded-[36px] bg-gradient-to-br from-electric-cyan/10 to-luxury-purple/10 border border-white/10 flex items-center justify-center shadow-2xl backdrop-blur-sm"
+                            >
+                                <span className="text-5xl">⚡</span>
+                            </motion.div>
+                        </div>
+
+                        {/* Texto principal */}
+                        <div className="space-y-3">
+                            <h1 className="text-white font-black text-2xl tracking-tight">
+                                SPHERE <span className="text-electric-cyan">Intelligence</span>
+                            </h1>
+                            <p className="text-gray-400 text-sm leading-relaxed max-w-sm">
+                                Tu equipo directivo de IA está listo. CEO, CTO, CMO, CFO — todos los expertos
+                                trabajando en sincronía para darte respuestas de nivel ejecutivo.
+                            </p>
+                        </div>
+
+                        {/* Features rápidos */}
+                        <div className="grid grid-cols-2 gap-3 w-full">
+                            {[
+                                { icon: "🏛️", label: "Junta Directiva", desc: "Orquestación multi-agente" },
+                                { icon: "🧠", label: "Expertos IA", desc: "C-Suite especializado" },
+                                { icon: "📊", label: "Artifacts", desc: "Código y análisis en vivo" },
+                                { icon: "🔒", label: "Encriptado", desc: "Canal seguro E2E" },
+                            ].map((feat) => (
+                                <div
+                                    key={feat.label}
+                                    className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-left hover:border-electric-cyan/20 transition-colors"
+                                >
+                                    <span className="text-lg">{feat.icon}</span>
+                                    <p className="text-white text-xs font-semibold mt-1">{feat.label}</p>
+                                    <p className="text-gray-500 text-[10px]">{feat.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* CTA */}
+                        <motion.button
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => toggleAgentModal(true)}
+                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-electric-cyan to-luxury-purple text-white font-bold text-sm uppercase tracking-widest shadow-[0_0_40px_rgba(0,240,200,0.15)] hover:shadow-[0_0_60px_rgba(0,240,200,0.25)] transition-all duration-500"
+                        >
+                            Iniciar Nuevo Chat
+                        </motion.button>
+
+                        <p className="text-[10px] text-gray-600 font-mono uppercase tracking-widest">
+                            Powered by SPHERE Neuro-Link v2.0
+                        </p>
+                    </motion.div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="flex flex-col h-full bg-transparent relative overflow-hidden">
             {/* Header */}
@@ -114,8 +189,9 @@ export function ChatPanel() {
                     <div className="relative">
                         <motion.div
                             layoutId="active-agent-avatar"
+                            onClick={() => navigate('/chat/settings')}
                             className={cn(
-                                "h-11 w-11 rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-white/10",
+                                "h-11 w-11 rounded-2xl flex items-center justify-center shadow-2xl overflow-hidden border border-white/10 cursor-pointer hover:border-white/30 transition-colors",
                                 isGroupChat ? "bg-gradient-to-tr from-luxury-purple via-electric-cyan to-blue-500" : "bg-white/5"
                             )}
                         >
@@ -149,7 +225,10 @@ export function ChatPanel() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <button className="p-2.5 rounded-xl hover:bg-white/5 transition-all text-gray-500 hover:text-white active-scale">
+                    <button
+                        onClick={() => navigate('/chat/settings')}
+                        className="p-2.5 rounded-xl hover:bg-white/5 transition-all text-gray-500 hover:text-white active-scale"
+                    >
                         <MoreVertical className="h-5 w-5" />
                     </button>
                 </div>
@@ -191,6 +270,8 @@ export function ChatPanel() {
                                         key={msg.id}
                                         message={msg}
                                         agent={msgAgent}
+                                        agentColor={effectiveBubbleColor}
+                                        sessionAvatar={sessionAvatar}
                                         isTyping={isTyping}
                                         isLast={idx === messages.length - 1}
                                     />
@@ -248,18 +329,28 @@ export function ChatPanel() {
                             disabled={isTyping}
                         />
 
-                        <button
-                            onClick={handleSendMessage}
-                            disabled={!inputValue.trim() || isTyping}
-                            className={cn(
-                                "p-3.5 rounded-xl transition-all duration-300",
-                                inputValue.trim() && !isTyping
-                                    ? "bg-luxury-purple text-white shadow-[0_0_20px_rgba(157,133,255,0.4)] hover:scale-105"
-                                    : "bg-white/5 text-gray-600 cursor-not-allowed"
-                            )}
-                        >
-                            <Send className="h-5 w-5" />
-                        </button>
+                        {isTyping ? (
+                            <button
+                                onClick={stopGeneration}
+                                className="p-3.5 rounded-xl transition-all duration-300 bg-red-500/80 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:bg-red-500 hover:scale-105 animate-pulse"
+                                title="Detener generación"
+                            >
+                                <Square className="h-5 w-5" />
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={!inputValue.trim()}
+                                className={cn(
+                                    "p-3.5 rounded-xl transition-all duration-300",
+                                    inputValue.trim()
+                                        ? "bg-luxury-purple text-white shadow-[0_0_20px_rgba(157,133,255,0.4)] hover:scale-105"
+                                        : "bg-white/5 text-gray-600 cursor-not-allowed"
+                                )}
+                            >
+                                <Send className="h-5 w-5" />
+                            </button>
+                        )}
                     </motion.div>
 
                     <div className="flex justify-between items-center px-4 mt-3">

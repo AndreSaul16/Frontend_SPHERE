@@ -1,31 +1,53 @@
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { ArrowLeft, Save, Camera, Zap, Pencil } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useChatStore, getGroupMembers } from "@/store/useChatStore";
 import { cn } from "@/lib/utils";
-import { useAgentAvatars, saveAgentAvatar } from "@/hooks/useAgentAvatars";
 
 export function ChatSettingsPage() {
     const navigate = useNavigate();
-    const { getAgents, selectedAgentId, updateAgentColor, renameAgent } = useChatStore();
+    const { getAgents, selectedAgentId, currentSessionId, sessions, updateSessionMetadata } = useChatStore();
     const agents = getAgents();
+    const currentSession = sessions.find(s => s.session_id === currentSessionId);
     const activeAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
-    const avatars = useAgentAvatars();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const debouncedSave = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Get group members for group chat
     const groupMembers = getGroupMembers(agents);
 
-    const avatarUrl = activeAgent ? avatars[activeAgent.id] : null;
+    if (!activeAgent || !currentSessionId || !currentSession) {
+        return (
+            <div className="flex items-center justify-center h-full text-text-secondary">
+                <div className="text-center space-y-3">
+                    <p className="text-lg font-medium">Sin chat activo</p>
+                    <p className="text-sm text-text-secondary/60">Selecciona o crea un chat primero para acceder a su configuración.</p>
+                    <button
+                        onClick={() => navigate('/')}
+                        className="mt-2 px-4 py-2 bg-electric-cyan/10 text-electric-cyan rounded-xl hover:bg-electric-cyan/20 transition-all text-sm font-medium"
+                    >
+                        Volver al inicio
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    const avatarUrl = currentSession?.visual_config?.avatar || null;
 
     const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (file && activeAgent) {
+        if (file && activeAgent && currentSessionId) {
             const reader = new FileReader();
             reader.onloadend = () => {
                 const base64 = reader.result as string;
-                saveAgentAvatar(activeAgent.id, base64);
+                // Persistir SOLO en visual_config de la sesión (atómico, aislado)
+                updateSessionMetadata(currentSessionId, {
+                    visual_config: {
+                        ...currentSession?.visual_config,
+                        avatar: base64
+                    }
+                });
             };
             reader.readAsDataURL(file);
         }
@@ -35,26 +57,69 @@ export function ChatSettingsPage() {
         fileInputRef.current?.click();
     };
 
-    if (!activeAgent) {
-        return (
-            <div className="flex items-center justify-center h-full text-text-secondary">
-                <p>Selecciona un agente primero.</p>
-            </div>
-        );
-    }
+    // Use data from session if available, otherwise fallback to agent
+    const sessionName = currentSession?.visual_config?.name || currentSession?.title;
+    // For direct chats, prioritize bubble_color, then effective color. For groups, use theme color.
+    const sessionColor = currentSession?.visual_config?.bubble_color || currentSession?.visual_config?.color || activeAgent.hexColor;
 
-    // Extract base name and role for display/edit
-    const match = activeAgent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/);
-    const baseName = match ? match[1].trim() : activeAgent.name;
-    const roleLabel = match ? match[2] : activeAgent.role;
-    const isGroupChat = activeAgent.id === 'group-chat';
+    const baseName = sessionName || activeAgent.identity?.name || (activeAgent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/)?.[1]?.trim() || activeAgent.name);
+    const roleLabel = activeAgent.identity?.role || (activeAgent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/)?.[2] || activeAgent.role);
 
-    const handleNameChange = (newName: string) => {
+    // Determine if it's a group chat based on session type if available, or fallback to agent ID
+    const isGroupChat = currentSession?.type === 'group' || activeAgent.id === 'group-chat';
+
+    // Input controlado con debounce para el nombre
+    const [localName, setLocalName] = useState(baseName);
+
+    // Sincronizar cuando cambia la sesión
+    useEffect(() => {
+        setLocalName(baseName);
+    }, [currentSessionId, baseName]);
+
+    const handleNameInput = (val: string) => {
+        setLocalName(val);
+        if (debouncedSave.current) clearTimeout(debouncedSave.current);
+        debouncedSave.current = setTimeout(() => {
+            handleNameChange(val || baseName);
+        }, 500);
+    };
+
+    const handleNameChange = async (newName: string) => {
+        if (!currentSessionId) return;
+
+        try {
+            await updateSessionMetadata(currentSessionId, {
+                title: newName,
+                visual_config: {
+                    ...currentSession?.visual_config,
+                    name: newName
+                }
+            });
+        } catch (error) {
+            console.error("Failed to update session name:", error);
+        }
+    };
+
+    const handleColorChange = async (newHex: string, themeName?: string) => {
+        if (!currentSessionId) return;
+
+        const updates: any = {
+            visual_config: {
+                ...currentSession?.visual_config,
+                color: newHex // Always set primary color for consistency
+            }
+        };
+
         if (isGroupChat) {
-            renameAgent(activeAgent.id, newName);
+            updates.visual_config.theme = themeName || 'Manual';
         } else {
-            // Re-append role for individual agents
-            renameAgent(activeAgent.id, `${newName} (${roleLabel})`);
+            updates.visual_config.bubble_color = newHex;
+        }
+
+        try {
+            await updateSessionMetadata(currentSessionId, updates);
+        } catch (error) {
+            console.error("Failed to update session color:", error);
         }
     };
 
@@ -98,7 +163,9 @@ export function ChatSettingsPage() {
 
                     {/* Agent Avatar & Identity Section */}
                     <section className="flex flex-col items-center gap-4 sm:gap-6 p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-surface/60 border border-surface-highlight backdrop-blur-sm text-center">
-                        <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">Identidad del Agente</h2>
+                        <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">
+                            {isGroupChat ? 'Identidad del Grupo' : 'Identidad del Agente'}
+                        </h2>
 
                         <div className="relative group">
                             <input
@@ -115,7 +182,7 @@ export function ChatSettingsPage() {
                                 {avatarUrl ? (
                                     <img src={avatarUrl} alt="Agent Avatar" className="h-full w-full object-cover" />
                                 ) : (
-                                    <span className={activeAgent.color}>{activeAgent.avatar}</span>
+                                    <span style={{ color: sessionColor }}>{activeAgent.avatar}</span>
                                 )}
                             </div>
                             <button
@@ -129,15 +196,15 @@ export function ChatSettingsPage() {
                         <div className="w-full max-w-sm space-y-4">
                             <div className="space-y-1.5">
                                 <label className="text-[10px] text-text-secondary uppercase tracking-widest font-mono block text-left ml-1 opacity-60">
-                                    Nombre del Agente
+                                    {isGroupChat ? 'Nombre del Grupo' : 'Nombre del Agente'}
                                 </label>
                                 <div className="relative group/input">
                                     <input
                                         type="text"
-                                        value={isGroupChat ? activeAgent.name : baseName}
-                                        onChange={(e) => handleNameChange(e.target.value)}
+                                        value={localName}
+                                        onChange={(e) => handleNameInput(e.target.value)}
                                         className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-3 text-lg font-bold text-text-primary focus:outline-none focus:border-electric-cyan/50 focus:ring-1 focus:ring-electric-cyan/20 transition-all text-center"
-                                        placeholder="Ej: Oberon"
+                                        placeholder={isGroupChat ? "Junta Directiva" : "Ej: Oberon"}
                                     />
                                     <Pencil className="absolute right-4 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary/30 group-focus-within/input:text-electric-cyan transition-colors" />
                                 </div>
@@ -150,14 +217,18 @@ export function ChatSettingsPage() {
                                             {roleLabel}
                                         </span>
                                     )}
-                                    <h3 className="text-sm font-medium text-text-secondary">Nivel de Cargo</h3>
+                                    <h3 className="text-sm font-medium text-text-secondary">
+                                        {isGroupChat ? 'Orquestación' : 'Nivel de Cargo'}
+                                    </h3>
                                 </div>
                                 <p className="text-text-secondary/60 text-xs italic">{activeAgent.description}</p>
                             </div>
                         </div>
 
                         <p className="text-[10px] text-text-secondary/40 max-w-[280px]">
-                            La identidad del agente define cómo se presenta en el sistema. Los cambios son instantáneos.
+                            {isGroupChat
+                                ? "La identidad del grupo se comparte con todos los miembros."
+                                : "La personalización es única para esta conversación."}
                         </p>
                     </section>
 
@@ -165,7 +236,9 @@ export function ChatSettingsPage() {
                     <section className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-surface/60 border border-surface-highlight backdrop-blur-sm space-y-4 sm:space-y-6">
                         <div className="flex items-center gap-2">
                             <Zap className="h-4 w-4 text-electric-cyan" />
-                            <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">Frecuencia del Experto (Color)</h2>
+                            <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">
+                                {isGroupChat ? 'Paleta de Grupo' : 'Frecuencia del Experto (Color)'}
+                            </h2>
                         </div>
 
                         {isGroupChat ? (
@@ -180,10 +253,10 @@ export function ChatSettingsPage() {
                                 ].map((c) => (
                                     <button
                                         key={c.hex}
-                                        onClick={() => updateAgentColor(activeAgent.id, c.hex)}
+                                        onClick={() => handleColorChange(c.hex, c.name)}
                                         className={cn(
                                             "group relative flex flex-col items-center gap-2 transition-all",
-                                            activeAgent.hexColor === c.hex ? "scale-110" : "opacity-60 hover:opacity-100"
+                                            sessionColor === c.hex ? "scale-110" : "opacity-60 hover:opacity-100"
                                         )}
                                     >
                                         <div
@@ -193,8 +266,8 @@ export function ChatSettingsPage() {
                                             )}
                                             style={{
                                                 backgroundColor: `${c.hex}20`,
-                                                borderColor: activeAgent.hexColor === c.hex ? c.hex : 'transparent',
-                                                boxShadow: activeAgent.hexColor === c.hex ? `0 0 15px ${c.hex}40` : 'none'
+                                                borderColor: sessionColor === c.hex ? c.hex : 'transparent',
+                                                boxShadow: sessionColor === c.hex ? `0 0 15px ${c.hex}40` : 'none'
                                             }}
                                         >
                                             <div className="h-full w-full flex items-center justify-center">
@@ -203,7 +276,7 @@ export function ChatSettingsPage() {
                                         </div>
                                         <span className="text-[8px] sm:text-[10px] font-mono uppercase tracking-tighter opacity-50">{c.name}</span>
 
-                                        {activeAgent.hexColor === c.hex && (
+                                        {sessionColor === c.hex && (
                                             <motion.div
                                                 layoutId="activeColor"
                                                 className="absolute -inset-1 border border-current rounded-xl opacity-20"
@@ -220,16 +293,16 @@ export function ChatSettingsPage() {
                                     <div
                                         className="h-24 w-24 sm:h-28 sm:w-28 rounded-full border-4 shadow-2xl transition-transform duration-500 group-hover/picker:scale-105 flex items-center justify-center relative overflow-hidden"
                                         style={{
-                                            borderColor: activeAgent.hexColor,
-                                            boxShadow: `0 0 30px ${activeAgent.hexColor}40`,
-                                            backgroundColor: `${activeAgent.hexColor}10`
+                                            borderColor: sessionColor,
+                                            boxShadow: `0 0 30px ${sessionColor}40`,
+                                            backgroundColor: `${sessionColor}10`
                                         }}
                                     >
                                         <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent pointer-events-none" />
                                         <input
                                             type="color"
-                                            value={activeAgent.hexColor}
-                                            onChange={(e) => updateAgentColor(activeAgent.id, e.target.value)}
+                                            value={sessionColor}
+                                            onChange={(e) => handleColorChange(e.target.value)}
                                             className="absolute inset-[10%] w-[80%] h-[80%] opacity-0 cursor-pointer z-10"
                                         />
                                         <div className="text-[32px] pointer-events-none z-0" style={{ color: activeAgent.hexColor }}>
@@ -237,9 +310,9 @@ export function ChatSettingsPage() {
                                         </div>
                                     </div>
                                     <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-midnight border border-surface-highlight rounded-xl shadow-2xl pointer-events-none flex items-center gap-2 min-w-[100px] justify-center">
-                                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: activeAgent.hexColor }} />
+                                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: sessionColor }} />
                                         <span className="text-[10px] font-bold font-mono uppercase tracking-widest text-text-primary">
-                                            {activeAgent.hexColor}
+                                            {sessionColor}
                                         </span>
                                     </div>
                                 </div>
@@ -251,8 +324,8 @@ export function ChatSettingsPage() {
 
                         <p className="text-[10px] sm:text-xs text-text-secondary/40 leading-relaxed text-center">
                             {isGroupChat
-                                ? "Para grupos, el color define el tema visual de la orquestación."
-                                : "Afecta al HUD, las burbujas y los efectos visuales de streaming."}
+                                ? "La paleta define los colores de burbujas de todos los miembros."
+                                : "Personaliza el color de los mensajes de este agente."}
                         </p>
                     </section>
 
@@ -266,7 +339,6 @@ export function ChatSettingsPage() {
 
                             <div className="space-y-2">
                                 {groupMembers.map((member) => {
-                                    const memberAvatar = avatars[member.id];
                                     const memberMatch = member.name.match(/^(.+?)\s*\(([A-Z]+)\)$/);
                                     const memberName = memberMatch ? memberMatch[1].trim() : member.name;
                                     const memberRole = memberMatch ? memberMatch[2] : member.role;
@@ -286,11 +358,7 @@ export function ChatSettingsPage() {
                                                 className="h-10 w-10 rounded-full flex items-center justify-center border overflow-hidden"
                                                 style={{ borderColor: `${member.hexColor}40` }}
                                             >
-                                                {memberAvatar ? (
-                                                    <img src={memberAvatar} alt={member.name} className="h-full w-full object-cover" />
-                                                ) : (
-                                                    <span className={cn("text-sm font-bold", member.color)}>{member.avatar}</span>
-                                                )}
+                                                <span className={cn("text-sm font-bold", member.color)}>{member.avatar}</span>
                                             </div>
                                             <div className="flex-1 text-left">
                                                 <p className="text-sm font-medium text-text-primary">{memberName}</p>

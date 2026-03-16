@@ -160,14 +160,28 @@ export const chatService = {
     /**
      * Gestión de Sesiones
      */
-    async createSession(title?: string, baseAgentId?: string, metadata?: any): Promise<any> {
+    async createSession(params: {
+        title?: string;
+        base_agent_id?: string; // or role
+        role?: string; // Backwards compatibility helper
+        visual_config?: any;
+        user_id?: string;
+        type?: string;
+        members?: string[];
+    }): Promise<any> {
+        // Map 'role' to 'base_agent_id' if needed or prioritize base_agent_id
+        const finalBaseAgentId = params.base_agent_id || params.role || 'CEO';
+
         const response = await fetch(`${API_URL}/sessions/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                title,
-                base_agent_id: baseAgentId,
-                metadata
+                title: params.title,
+                user_id: params.user_id || "default_user",
+                base_agent_id: finalBaseAgentId,
+                visual_config: params.visual_config,
+                type: params.type,
+                members: params.members
             })
         });
         if (!response.ok) {
@@ -184,6 +198,18 @@ export const chatService = {
         return response.json();
     },
 
+    async updateSession(sessionId: string, updates: { title?: string, visual_config?: any, enabled_tools?: string[], members?: string[] }): Promise<any> {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) {
+            throw new Error(`Error updating session: ${response.status}`);
+        }
+        return response.json();
+    },
+
     async getSessionHistory(sessionId: string): Promise<any> {
         const response = await fetch(`${API_URL}/sessions/${sessionId}/history`);
         return response.json();
@@ -195,13 +221,22 @@ export const chatService = {
         return response.json();
     },
 
-    async createCustomAgent(data: { name: string, description: string, system_prompt: string, color?: string }): Promise<any> {
+    async createCustomAgent(data: { identity: any, brain_config: any, owner_user_id?: string, is_public?: boolean }): Promise<any> {
         const response = await fetch(`${API_URL}/agents/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
         return response.json();
+    },
+
+    async deleteSession(sessionId: string): Promise<void> {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok) {
+            throw new Error(`Error deleting session: ${response.status}`);
+        }
     },
 
     async deleteCustomAgent(agentId: string): Promise<void> {

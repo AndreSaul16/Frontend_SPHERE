@@ -9,28 +9,25 @@ import type { Message, Agent } from "@/types";
 import { ArtifactCard } from './ArtifactCard';
 import { useChatStore } from '@/store/useChatStore';
 import { useUserAvatar } from '@/hooks/useUserAvatar';
-import { useAgentAvatars } from '@/hooks/useAgentAvatars';
 
 interface MessageBubbleProps {
     message: Message;
     agent?: Agent;
+    agentColor?: string;
+    sessionAvatar?: string | null;
     isTyping?: boolean;
     isLast?: boolean;
 }
 
-export function MessageBubble({ message, agent, isTyping, isLast }: MessageBubbleProps) {
+export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyping, isLast }: MessageBubbleProps) {
     const isUser = message.role === 'user';
     const isSystem = message.role === 'system';
     const userAvatar = useUserAvatar();
-    const agentAvatars = useAgentAvatars();
     const artifacts = useChatStore(state => state.artifacts);
 
-    // Get custom avatar for agent if exists
-    const customAgentAvatar = agent?.id ? agentAvatars[agent.id] : null;
-
-    // HUD Colors (Fallbacks)
+    // HUD Colors: prioridad sesión > agente > fallback
     const defaultColor = '#00F0C8'; // Cyan
-    const activeHexColor = agent?.hexColor || defaultColor;
+    const activeHexColor = agentColor || agent?.hexColor || defaultColor;
 
     if (isSystem) {
         return (
@@ -64,8 +61,8 @@ export function MessageBubble({ message, agent, isTyping, isLast }: MessageBubbl
                         )}
                         style={{ borderColor: `${activeHexColor}40` }}
                     >
-                        {customAgentAvatar ? (
-                            <img src={customAgentAvatar} alt={agent?.name} className="h-full w-full object-cover" />
+                        {sessionAvatar ? (
+                            <img src={sessionAvatar} alt={agent?.name} className="h-full w-full object-cover" />
                         ) : agent ? (
                             <span className={cn("text-[10px] sm:text-xs font-bold", agent.color)}>{agent.avatar}</span>
                         ) : (
@@ -91,22 +88,25 @@ export function MessageBubble({ message, agent, isTyping, isLast }: MessageBubbl
 
                 {/* Bubble - IRON MAN HUD Morphing */}
                 <motion.div
-                    layout
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{
-                        opacity: 1,
-                        y: 0,
-                        scale: 1,
-                        borderColor: isUser ? '#22D3EE20' : `${activeHexColor}50`,
-                        boxShadow: isUser ? 'none' : `0 0 15px ${activeHexColor}15`
-                    }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
+                    initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
                     className={cn(
                         "p-3 sm:p-4 rounded-2xl shadow-lg text-sm leading-relaxed border text-left",
+                        "min-w-[80px] max-w-full overflow-hidden",
+                        "[overflow-wrap:break-word] [word-break:break-word]",
                         isUser
-                            ? "bg-user-bubble text-white rounded-tr-sm border-cyan-500/20"
+                            ? "bg-user-bubble text-white rounded-tr-sm"
                             : "bg-ai-bubble/95 text-text-primary rounded-tl-sm backdrop-blur-sm relative"
                     )}
+                    style={isUser
+                        ? { borderColor: '#22D3EE20' }
+                        : {
+                            borderColor: `${activeHexColor}35`,
+                            boxShadow: `0 0 20px ${activeHexColor}10`,
+                            backgroundColor: undefined,
+                        }
+                    }
                 >
                     {!isUser && (
                         <motion.div

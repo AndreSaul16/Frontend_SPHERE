@@ -14,6 +14,7 @@ interface ChatState {
     messagesBySession: Record<string, Message[]>;
     sessionsByAgent: Record<string, string>; // agentId → sessionId (aislamiento de chats)
     streamingSessionIds: string[];
+    abortController: AbortController | null;
     isAgentModalOpen: boolean;
     isArtifactPanelOpen: boolean;
     isSidebarOpen: boolean;
@@ -33,11 +34,14 @@ interface ChatState {
     selectAgent: (agentId: string) => void;
     toggleSidebar: (open?: boolean) => void;
     sendMessage: (content: string) => Promise<void>;
+    stopGeneration: () => void;
     toggleArtifactPanel: () => void;
     renameAgent: (id: string, newName: string) => void;
     updateAgentColor: (id: string, newHexColor: string) => void;
     addArtifact: (artifact: Artifact) => void;
     setActiveArtifact: (id: string | null) => void;
+    updateSessionMetadata: (sessionId: string, updates: { title?: string; visual_config?: any }) => Promise<void>;
+    deleteSession: (sessionId: string) => Promise<void>;
     resetState: () => void;
 
     // Selector
@@ -137,6 +141,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     messagesBySession: {},
     sessionsByAgent: {}, // Mapeo agente → sesión para aislamiento de chats
     streamingSessionIds: [],
+    abortController: null,
     isAgentModalOpen: false,
     isArtifactPanelOpen: false,
     isSidebarOpen: true,
@@ -175,16 +180,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({ errorStates: { ...state.errorStates, fetch_agents: null } }));
         try {
             const customAgentsData = await chatService.getCustomAgents();
-            // Mapear de Response a Agent tipo frontend
+            // Mapear de Response a Agent tipo frontend evolucionado
             const mapped: Agent[] = customAgentsData.map((a: any) => ({
                 id: a.agent_id,
-                name: a.name,
-                role: a.role as Role,
-                description: a.description,
-                avatar: a.name.charAt(0).toUpperCase(),
+                name: a.identity.name,
+                role: a.identity.role as Role,
+                description: a.brain_config.system_prompt.substring(0, 100) + '...',
+                avatar: a.identity.name.charAt(0).toUpperCase(),
                 color: 'bg-surface border-white/5',
-                hexColor: a.color || '#00f2ff',
-                isOnline: true
+                hexColor: a.identity.color || '#00f2ff',
+                isOnline: true,
+                identity: a.identity,
+                brain_config: a.brain_config,
+                owner_user_id: a.owner_user_id,
+                is_public: a.is_public
             }));
             set({ customAgents: mapped });
         } catch (error: any) {
@@ -199,13 +208,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const newAgentData = await chatService.createCustomAgent(data);
             const mapped: Agent = {
                 id: newAgentData.agent_id,
-                name: newAgentData.name,
-                role: newAgentData.role as Role,
-                description: newAgentData.description,
-                avatar: newAgentData.name.charAt(0).toUpperCase(),
+                name: newAgentData.identity.name,
+                role: newAgentData.identity.role as Role,
+                description: newAgentData.brain_config.system_prompt.substring(0, 100) + '...',
+                avatar: newAgentData.identity.name.charAt(0).toUpperCase(),
                 color: 'bg-surface border-white/5',
-                hexColor: newAgentData.color || '#00f2ff',
-                isOnline: true
+                hexColor: newAgentData.identity.color || '#00f2ff',
+                isOnline: true,
+                identity: newAgentData.identity,
+                brain_config: newAgentData.brain_config,
+                owner_user_id: newAgentData.owner_user_id,
+                is_public: newAgentData.is_public
             };
             set(state => ({ customAgents: [mapped, ...state.customAgents] }));
         } catch (error: any) {
@@ -230,12 +243,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const targetId = agentId || 'group-chat';
             const allAgents = [...get().coreAgents, ...get().customAgents];
             const agent = allAgents.find(a => a.id === targetId);
-            const title = agent ? `Chat con ${agent.name}` : 'Nueva Sesión';
+            const isGroup = targetId === 'group-chat';
+            const title = agent ? agent.name : 'Nueva Sesión';
+
+            // Prepare session creation payload
+            const sessionPayload = {
+                title,
+                role: agent?.role || 'CEO',
+                visual_config: agent ? {
+                    name: agent.name,
+                    color: agent.hexColor,
+                    bubble_color: !isGroup ? agent.hexColor : undefined
+                } : undefined,
+                user_id: "default_user",
+                type: isGroup ? 'group' : 'direct',
+                members: isGroup ? allAgents.map(a => a.id) : [targetId]
+            };
+
+            // Note: services/api chatService.createSession might need update to accept object or changed args
+            // For now assuming we pass args that match the new backend expectation if we updated api service
+            // Or we update the service call here if the service was generic.
+            // Let's assume we need to update api.ts as well, but for now let's pass loosely.
+            // ACTUALLY, checking current api.ts usage in file view: 
+            // createSession(title, role, visual_config, user_id)
+            // We need to pass type and members. The current api.ts likely has fixed args.
+            // I should update services/api.ts first ideally, but I can't see it now.
+            // I will assume I need to update api.ts too.
+            // Let's modify this call to pass an object if I refactor api.ts, or just extra args.
 
             const newSession = await chatService.createSession(
-                title,
-                agent?.role || 'CEO',
-                null // Metadata is empty for now until UI is added
+                sessionPayload
             );
             const sessionId = newSession.session_id;
 
@@ -349,13 +386,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
             });
 
             set((state) => {
-                // Detectar el agentId predominante en la sesión
-                const agentIds = mappedMessages
-                    .filter(m => m.agentId && m.agentId !== 'system')
-                    .map(m => m.agentId);
-                const detectedAgentId = agentIds.length > 0 ? agentIds[0] : 'group-chat';
+                // Priorizar base_agent_id de la sesión si existe
+                const session = state.sessions.find(s => s.session_id === sessionId);
+                let detectedAgentId = session?.base_agent_id || 'group-chat';
 
-                console.log('🌐 [loadSession] Servidor:', { sessionId, detectedAgentId, agentIds });
+                // Solo si no hay base_agent_id, intentamos inferirlo de los mensajes
+                if (detectedAgentId === 'group-chat' || !detectedAgentId) {
+                    const agentIds = mappedMessages
+                        .filter(m => m.agentId && m.agentId !== 'system')
+                        .map(m => m.agentId);
+                    if (agentIds.length > 0) {
+                        detectedAgentId = agentIds[0] as string;
+                    }
+                }
+
+                console.log('🌐 [loadSession] Servidor:', { sessionId, detectedAgentId, sessionBaseAgent: session?.base_agent_id });
 
                 return {
                     currentSessionId: sessionId,
@@ -480,6 +525,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // Usar una referencia local al sessionId para los callbacks
             const targetSessionId = sessionId!;
 
+            // AbortController para permitir Stop Generation
+            const abortController = new AbortController();
+            set({ abortController });
+
             await chatService.streamChat(
                 content,
                 targetSessionId,
@@ -558,6 +607,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     onDone: () => {
                         set((state) => ({
                             streamingSessionIds: state.streamingSessionIds.filter(id => id !== targetSessionId),
+                            abortController: null,
                         }));
                     },
                     onError: () => {
@@ -571,15 +621,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
                                 ),
                             },
                             streamingSessionIds: state.streamingSessionIds.filter(id => id !== targetSessionId),
+                            abortController: null,
                         }));
                     }
                 },
-                (targetRole as any) === "specialist" ? (selectedAgentId || undefined) : targetRole
+                (targetRole as any) === "specialist" ? (selectedAgentId || undefined) : targetRole,
+                abortController.signal
             );
         } catch (error: any) {
+            // No reportar error si fue una cancelación intencional (Stop Generation)
+            if (error?.name === 'AbortError') {
+                console.log('🛑 Generación detenida por el usuario');
+                return;
+            }
             const sphereError = new NetworkError('Error en el flujo de transmisión', 'send_message', error);
             set((state) => ({
                 streamingSessionIds: state.streamingSessionIds.filter(id => id !== sessionId),
+                abortController: null,
                 errorStates: { ...state.errorStates, send_message: sphereError.message }
             }));
             // @ts-ignore
@@ -587,6 +645,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
     },
 
+    stopGeneration: () => {
+        const { abortController, currentSessionId } = get();
+        if (abortController) {
+            abortController.abort();
+            console.log('🛑 Stop Generation activado');
+        }
+        set((state) => ({
+            abortController: null,
+            streamingSessionIds: currentSessionId
+                ? state.streamingSessionIds.filter(id => id !== currentSessionId)
+                : [],
+        }));
+        // Limpiar referencia de artefacto en streaming si existe
+        if (currentSessionId) {
+            // @ts-ignore
+            window[`__streamingArtifact_${currentSessionId}`] = null;
+        }
+    },
     resetState: () => set({
         messagesBySession: {},
         artifacts: [],
@@ -600,5 +676,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
             artifact_parser: null,
             core_engine: null
         }
-    })
+    }),
+
+    updateSessionMetadata: async (sessionId: string, updates: { title?: string; visual_config?: any; members?: string[] }) => {
+        try {
+            const updatedSession = await chatService.updateSession(sessionId, updates);
+
+            set((state) => ({
+                sessions: state.sessions.map(s =>
+                    s.session_id === sessionId ? { ...s, ...updatedSession } : s
+                )
+            }));
+
+            console.log('✅ [updateSessionMetadata] Success:', updatedSession);
+        } catch (error) {
+            console.error('❌ [updateSessionMetadata] Error:', error);
+            throw error;
+        }
+    },
+
+    deleteSession: async (sessionId: string) => {
+        try {
+            await chatService.deleteSession(sessionId);
+            const { currentSessionId, messagesBySession } = get();
+
+            // Limpiar mensajes del mapa
+            const newMessages = { ...messagesBySession };
+            delete newMessages[sessionId];
+
+            set({
+                sessions: get().sessions.filter(s => s.session_id !== sessionId),
+                messagesBySession: newMessages,
+                // Si era la sesión activa, limpiar → Welcome Screen
+                ...(currentSessionId === sessionId ? {
+                    currentSessionId: null,
+                    selectedAgentId: null,
+                } : {}),
+            });
+
+            console.log('🗑️ [deleteSession] Sesión eliminada:', sessionId);
+        } catch (error) {
+            console.error('❌ [deleteSession] Error:', error);
+            throw error;
+        }
+    },
 }));

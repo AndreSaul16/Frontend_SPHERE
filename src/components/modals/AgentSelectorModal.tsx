@@ -70,7 +70,20 @@ export function AgentSelectorModal() {
         if (isSavingAgent) return;
         setIsSavingAgent(true);
         try {
-            await addCustomAgent(newAgent);
+            await addCustomAgent({
+                identity: {
+                    name: newAgent.name,
+                    role: 'specialist',
+                    color: newAgent.color || '#8A63D2'
+                },
+                brain_config: {
+                    model: 'gpt-4o', // Default model
+                    temperature: 0.7,
+                    system_prompt: newAgent.system_prompt
+                },
+                owner_user_id: 'default_user',
+                is_public: false
+            });
             setIsCreating(false);
             setNewAgent({ name: "", description: "", system_prompt: "", color: "blue" });
         } catch (error) {
