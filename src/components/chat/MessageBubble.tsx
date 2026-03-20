@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize from 'rehype-sanitize';
 import 'highlight.js/styles/atom-one-dark.css';
 import { motion } from 'framer-motion';
+import { Copy, Check, RefreshCw, Pin, ThumbsUp, ThumbsDown, Pencil, Trash2 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import type { Message, Agent } from "@/types";
 import { ArtifactCard } from './ArtifactCard';
+import { ToolExecutionCard } from './ToolExecutionCard';
 import { useChatStore } from '@/store/useChatStore';
 import { useUserAvatar } from '@/hooks/useUserAvatar';
 
@@ -17,13 +19,37 @@ interface MessageBubbleProps {
     sessionAvatar?: string | null;
     isTyping?: boolean;
     isLast?: boolean;
+    searchQuery?: string;
+    isPinned?: boolean;
+    rating?: 'up' | 'down' | null;
+    onRegenerate?: () => void;
+    onPin?: () => void;
+    onRate?: (rating: 'up' | 'down') => void;
+    onEdit?: (newContent: string) => void;
+    onDelete?: () => void;
 }
 
-export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyping, isLast }: MessageBubbleProps) {
+export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyping, isLast, searchQuery, isPinned, rating, onRegenerate, onPin, onRate, onEdit, onDelete }: MessageBubbleProps) {
     const isUser = message.role === 'user';
     const isSystem = message.role === 'system';
     const userAvatar = useUserAvatar();
     const artifacts = useChatStore(state => state.artifacts);
+    const [copied, setCopied] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState(message.content);
+
+    const handleCopy = async () => {
+        await navigator.clipboard.writeText(message.content);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    const handleEditSubmit = () => {
+        if (editValue.trim() && editValue !== message.content) {
+            onEdit?.(editValue);
+        }
+        setIsEditing(false);
+    };
 
     // HUD Colors: prioridad sesión > agente > fallback
     const defaultColor = '#00F0C8'; // Cyan
@@ -92,7 +118,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     transition={{ duration: 0.4, ease: "easeOut" }}
                     className={cn(
-                        "p-3 sm:p-4 rounded-2xl shadow-lg text-sm leading-relaxed border text-left",
+                        "group p-3 sm:p-4 rounded-2xl shadow-lg text-sm leading-relaxed border text-left",
                         "min-w-[80px] max-w-full overflow-hidden",
                         "[overflow-wrap:break-word] [word-break:break-word]",
                         isUser
@@ -114,18 +140,21 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                             className="text-[9px] sm:text-[10px] font-bold mb-1 uppercase tracking-widest opacity-80 flex items-center gap-1.5"
                         >
                             <span className="h-1 w-1 rounded-full bg-current animate-pulse" />
-                            {agent ? agent.name.split(' ')[0] : 'Sintonizando...'}
+                            {agent ? agent.name.split(' ')[0] : (message.role && !['user', 'system'].includes(message.role) ? message.role : 'SPHERE')}
                         </motion.div>
                     )}
 
                     <div className="prose prose-invert prose-sm max-w-none break-words leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0">
-                        {/* Process message content, detecting artifact placeholders */}
+                        {/* Process message content, detecting artifact + tool placeholders */}
                         {(() => {
-                            const artifactPattern = /\[ARTIFACT:([^:]+):([^\]]+)\]/g;
+                            const combinedPattern = /\[ARTIFACT:([^:]+):([^\]]+)\]|\[TOOL_START:([^\]]+)\]|\[TOOL_RESULT:([^:]+):([^\]]*)\]/g;
                             const parts: React.ReactNode[] = [];
                             let lastIndex = 0;
                             let match;
                             let partKey = 0;
+
+                            // Track tool states for rendering cards
+                            const toolStates: Record<string, { status: 'running' | 'completed'; result?: string }> = {};
 
                             const content = message.content;
 
@@ -167,7 +196,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                                 ),
                             };
 
-                            while ((match = artifactPattern.exec(content)) !== null) {
+                            while ((match = combinedPattern.exec(content)) !== null) {
                                 // Add text before the placeholder
                                 if (match.index > lastIndex) {
                                     const textBefore = content.slice(lastIndex, match.index);
@@ -184,19 +213,60 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                                     }
                                 }
 
-                                // Add the artifact card
-                                const artifactId = match[1];
-                                const artifact = artifacts.find(a => a.id === artifactId);
-                                if (artifact) {
+                                if (match[1]) {
+                                    // ARTIFACT match: [ARTIFACT:id:title]
+                                    const artifactId = match[1];
+                                    const artifact = artifacts.find(a => a.id === artifactId);
+                                    if (artifact) {
+                                        parts.push(
+                                            <ArtifactCard
+                                                key={`artifact-${artifactId}`}
+                                                content={artifact.content}
+                                                language={artifact.language || ''}
+                                                title={artifact.title}
+                                                artifactId={artifactId}
+                                            />
+                                        );
+                                    }
+                                } else if (match[3]) {
+                                    // TOOL_START match: [TOOL_START:name]
+                                    const toolName = match[3];
+                                    toolStates[toolName] = { status: 'running' };
                                     parts.push(
-                                        <ArtifactCard
-                                            key={`artifact-${artifactId}`}
-                                            content={artifact.content}
-                                            language={artifact.language || ''}
-                                            title={artifact.title}
-                                            artifactId={artifactId}
+                                        <ToolExecutionCard
+                                            key={`tool-start-${partKey++}`}
+                                            toolName={toolName}
+                                            status="running"
                                         />
                                     );
+                                } else if (match[4]) {
+                                    // TOOL_RESULT match: [TOOL_RESULT:name:result]
+                                    const toolName = match[4];
+                                    const toolResult = match[5] || '';
+                                    toolStates[toolName] = { status: 'completed', result: toolResult };
+                                    // Replace the running card with a completed one
+                                    const runningIdx = parts.findIndex(
+                                        (p) => React.isValidElement(p) && p.props?.toolName === toolName && p.props?.status === 'running'
+                                    );
+                                    if (runningIdx >= 0) {
+                                        parts[runningIdx] = (
+                                            <ToolExecutionCard
+                                                key={`tool-done-${partKey++}`}
+                                                toolName={toolName}
+                                                status="completed"
+                                                result={toolResult}
+                                            />
+                                        );
+                                    } else {
+                                        parts.push(
+                                            <ToolExecutionCard
+                                                key={`tool-done-${partKey++}`}
+                                                toolName={toolName}
+                                                status="completed"
+                                                result={toolResult}
+                                            />
+                                        );
+                                    }
                                 }
 
                                 lastIndex = match.index + match[0].length;
@@ -243,15 +313,82 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                         )}
                     </div>
 
-                    <div className="flex items-center justify-end gap-2 mt-2">
-                        {!isUser && (
-                            <span className="text-[8px] sm:text-[9px] opacity-30 font-mono tracking-tighter uppercase">
-                                freq: {Math.floor(Math.random() * 900 + 100)}mhz
+                    {/* Pin indicator */}
+                    {isPinned && (
+                        <div className="flex items-center gap-1 mt-1">
+                            <Pin className="h-3 w-3 text-yellow-500" />
+                            <span className="text-[9px] text-yellow-500/70 uppercase tracking-wider">Pinned</span>
+                        </div>
+                    )}
+
+                    {/* Action buttons + timestamp footer */}
+                    <div className="flex items-center justify-between gap-2 mt-2">
+                        {/* Action Buttons — visible on hover via group */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                            {/* Copy */}
+                            <button onClick={handleCopy} className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors" title="Copiar">
+                                {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                            </button>
+
+                            {/* Pin */}
+                            {onPin && (
+                                <button onClick={onPin} className={cn("p-1 rounded hover:bg-white/10 transition-colors", isPinned ? "text-yellow-500" : "text-gray-500 hover:text-white")} title={isPinned ? "Desanclar" : "Anclar"}>
+                                    <Pin className="h-3 w-3" />
+                                </button>
+                            )}
+
+                            {/* AI-only actions */}
+                            {!isUser && !isSystem && (
+                                <>
+                                    {/* Regenerate */}
+                                    {onRegenerate && (
+                                        <button onClick={onRegenerate} className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors" title="Regenerar">
+                                            <RefreshCw className="h-3 w-3" />
+                                        </button>
+                                    )}
+
+                                    {/* Rating */}
+                                    {onRate && (
+                                        <>
+                                            <button onClick={() => onRate('up')} className={cn("p-1 rounded hover:bg-white/10 transition-colors", rating === 'up' ? "text-emerald-400" : "text-gray-500 hover:text-white")} title="Buena respuesta">
+                                                <ThumbsUp className="h-3 w-3" />
+                                            </button>
+                                            <button onClick={() => onRate('down')} className={cn("p-1 rounded hover:bg-white/10 transition-colors", rating === 'down' ? "text-red-400" : "text-gray-500 hover:text-white")} title="Mala respuesta">
+                                                <ThumbsDown className="h-3 w-3" />
+                                            </button>
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {/* User-only actions */}
+                            {isUser && (
+                                <>
+                                    {onEdit && (
+                                        <button onClick={() => setIsEditing(true)} className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white transition-colors" title="Editar">
+                                            <Pencil className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                    {onDelete && (
+                                        <button onClick={onDelete} className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-red-400 transition-colors" title="Eliminar">
+                                            <Trash2 className="h-3 w-3" />
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        {/* Timestamp + freq */}
+                        <div className="flex items-center gap-2">
+                            {!isUser && (
+                                <span className="text-[8px] sm:text-[9px] opacity-30 font-mono tracking-tighter uppercase">
+                                    freq: {Math.floor(Math.random() * 900 + 100)}mhz
+                                </span>
+                            )}
+                            <span className="text-[9px] sm:text-[10px] opacity-30">
+                                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                        )}
-                        <span className="text-[9px] sm:text-[10px] opacity-30">
-                            {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        </div>
                     </div>
                 </motion.div>
             </div>

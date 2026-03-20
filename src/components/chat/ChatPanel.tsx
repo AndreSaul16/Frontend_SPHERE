@@ -1,10 +1,12 @@
-import { useRef, useState, useEffect } from "react";
-import { Send, Square, Paperclip, MoreVertical, Zap, ShieldCheck } from "lucide-react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import { Send, Square, Paperclip, MoreVertical, Zap, ShieldCheck, Search, X, Download, Pin } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChatStore, getGroupMembers } from "@/store/useChatStore";
+import { chatService } from "@/services/api";
 import { MessageBubble } from "./MessageBubble";
 import { cn } from "@/lib/utils";
+import { exportAsMarkdown, downloadAsFile } from "@/utils/exportChat";
 
 export function ChatPanel() {
     const navigate = useNavigate();
@@ -27,12 +29,28 @@ export function ChatPanel() {
     const [inputValue, setInputValue] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
+    // Search state
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [showPinnedOnly, setShowPinnedOnly] = useState(false);
+
+    // Pins & Ratings state
+    const [pinnedMessages, setPinnedMessages] = useState<string[]>([]);
+    const [ratings, setRatings] = useState<Record<string, 'up' | 'down'>>({});
+
     const isTyping = currentSessionId ? streamingSessionIds.includes(currentSessionId) : false;
     const activeAgent = agents.find(a => a.id === selectedAgentId);
     const currentSession = sessions.find(s => s.session_id === currentSessionId);
 
     const isGroupChat = selectedAgentId === 'group-chat';
     const groupMembers = getGroupMembers(agents);
+
+    // Load pins when session changes
+    useEffect(() => {
+        if (currentSessionId) {
+            chatService.getPins(currentSessionId).then(setPinnedMessages).catch(() => {});
+        }
+    }, [currentSessionId]);
 
     // Color efectivo: priorizar bubble_color de sesión > color de sesión > hexColor del agente
     const effectiveBubbleColor = currentSession?.visual_config?.bubble_color
@@ -41,6 +59,39 @@ export function ChatPanel() {
 
     // Priorizar Avatar de la sesión
     const sessionAvatar = currentSession?.visual_config?.avatar;
+
+    // Filtered messages (search + pinned filter)
+    const filteredMessages = messages.filter(msg => {
+        if (showPinnedOnly && !pinnedMessages.includes(msg.id)) return false;
+        if (searchQuery && !msg.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        return true;
+    });
+
+    // Handlers
+    const handlePin = useCallback(async (messageId: string) => {
+        if (!currentSessionId) return;
+        const isPinned = pinnedMessages.includes(messageId);
+        if (isPinned) {
+            await chatService.unpinMessage(currentSessionId, messageId);
+            setPinnedMessages(prev => prev.filter(id => id !== messageId));
+        } else {
+            await chatService.pinMessage(currentSessionId, messageId);
+            setPinnedMessages(prev => [...prev, messageId]);
+        }
+    }, [currentSessionId, pinnedMessages]);
+
+    const handleRate = useCallback(async (messageId: string, rating: 'up' | 'down') => {
+        if (!currentSessionId) return;
+        await chatService.rateMessage(currentSessionId, messageId, rating);
+        setRatings(prev => ({ ...prev, [messageId]: rating }));
+    }, [currentSessionId]);
+
+    const handleExport = useCallback(() => {
+        const title = currentSession?.title || 'SPHERE Chat';
+        const md = exportAsMarkdown(messages, title, agents);
+        const filename = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.md`;
+        downloadAsFile(md, filename);
+    }, [messages, currentSession, agents]);
 
     const getAgentDisplayInfo = (agent: typeof activeAgent) => {
         if (!agent) return { baseName: 'SPHERE Engine', role: 'CORE' };
@@ -224,15 +275,53 @@ export function ChatPanel() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => navigate('/chat/settings')}
-                        className="p-2.5 rounded-xl hover:bg-white/5 transition-all text-gray-500 hover:text-white active-scale"
-                    >
-                        <MoreVertical className="h-5 w-5" />
+                <div className="flex items-center gap-1">
+                    <button onClick={() => setIsSearchOpen(v => !v)} className={cn("p-2 rounded-xl hover:bg-white/5 transition-all active-scale", isSearchOpen ? "text-electric-cyan" : "text-gray-500 hover:text-white")} title="Buscar">
+                        <Search className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => setShowPinnedOnly(v => !v)} className={cn("p-2 rounded-xl hover:bg-white/5 transition-all active-scale", showPinnedOnly ? "text-yellow-500" : "text-gray-500 hover:text-white")} title="Solo pinneados">
+                        <Pin className="h-4 w-4" />
+                    </button>
+                    <button onClick={handleExport} className="p-2 rounded-xl hover:bg-white/5 transition-all text-gray-500 hover:text-white active-scale" title="Exportar">
+                        <Download className="h-4 w-4" />
+                    </button>
+                    <button onClick={() => navigate('/chat/settings')} className="p-2 rounded-xl hover:bg-white/5 transition-all text-gray-500 hover:text-white active-scale">
+                        <MoreVertical className="h-4 w-4" />
                     </button>
                 </div>
             </header>
+
+            {/* Search Bar */}
+            <AnimatePresence>
+                {isSearchOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="border-b border-white/5 bg-midnight/60 backdrop-blur-xl px-6 overflow-hidden"
+                    >
+                        <div className="flex items-center gap-3 py-3 max-w-4xl mx-auto">
+                            <Search className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Buscar en esta conversación..."
+                                className="flex-1 bg-transparent text-white text-sm placeholder:text-gray-600 focus:outline-none"
+                                autoFocus
+                            />
+                            {searchQuery && (
+                                <span className="text-[10px] text-gray-500 font-mono">
+                                    {filteredMessages.filter(m => m.role !== 'system').length} resultados
+                                </span>
+                            )}
+                            <button onClick={() => { setSearchQuery(''); setIsSearchOpen(false); }} className="p-1 hover:bg-white/10 rounded text-gray-500 hover:text-white">
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Messages Area */}
             <div
@@ -263,7 +352,7 @@ export function ChatPanel() {
                         </motion.div>
                     ) : (
                         <>
-                            {messages.map((msg, idx) => {
+                            {filteredMessages.map((msg, idx) => {
                                 const msgAgent = msg.agentId ? agents.find(a => a.id === msg.agentId) : (msg.role !== 'user' && msg.role !== 'system' ? activeAgent : undefined);
                                 return (
                                     <MessageBubble
@@ -273,7 +362,13 @@ export function ChatPanel() {
                                         agentColor={effectiveBubbleColor}
                                         sessionAvatar={sessionAvatar}
                                         isTyping={isTyping}
-                                        isLast={idx === messages.length - 1}
+                                        isLast={idx === filteredMessages.length - 1}
+                                        searchQuery={searchQuery || undefined}
+                                        isPinned={pinnedMessages.includes(msg.id)}
+                                        rating={ratings[msg.id] || null}
+                                        onPin={() => handlePin(msg.id)}
+                                        onRate={(r) => handleRate(msg.id, r)}
+                                        onRegenerate={!msg.role.includes('user') && idx === filteredMessages.length - 1 ? () => sendMessage(messages.filter(m => m.role === 'user').pop()?.content || '') : undefined}
                                     />
                                 );
                             })}

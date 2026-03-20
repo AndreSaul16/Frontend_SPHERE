@@ -19,6 +19,7 @@ interface ChatState {
     isArtifactPanelOpen: boolean;
     isSidebarOpen: boolean;
     artifacts: Artifact[];
+    streamingArtifactBySession: Record<string, string | null>;
     activeArtifactId: string | null;
     errorStates: Record<ErrorContext, string | null>; // Errores por método
 
@@ -147,6 +148,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     isSidebarOpen: true,
     artifacts: [],
     activeArtifactId: null,
+    streamingArtifactBySession: {},
     errorStates: {
         fetch_agents: null,
         create_session: null,
@@ -246,10 +248,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const isGroup = targetId === 'group-chat';
             const title = agent ? agent.name : 'Nueva Sesión';
 
+            // Determine agent_ref_type: core agents use role strings, custom use UUIDs
+            const isCoreAgent = ['group-chat', 'ceo-1', 'cto-1', 'cmo-1', 'cfo-1'].includes(targetId);
+            const agentRefType = isCoreAgent ? 'core' : 'custom';
+            const baseAgentId = isCoreAgent ? (agent?.role || 'CEO') : targetId;
+
             // Prepare session creation payload
             const sessionPayload = {
                 title,
-                role: agent?.role || 'CEO',
+                base_agent_id: baseAgentId,
+                agent_ref_type: agentRefType,
                 visual_config: agent ? {
                     name: agent.name,
                     color: agent.hexColor,
@@ -331,12 +339,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             const sessionArtifacts: Artifact[] = [];
             const mappedMessages: Message[] = history.messages.map((m: any, idx: number) => {
                 let role: Role = 'system';
+                let resolvedAgentId: string | undefined;
                 if (m.type === 'human') role = 'user';
                 else if (m.type === 'ai') {
                     const agentId = m.additional_kwargs?.agent_id;
-                    const agent = allAgents.find(a => a.id === agentId);
-                    // IMPORTANTE: Si es AI, nunca debe ser 'system' para evitar el estilo de "pill" del sistema
-                    role = (agent ? agent.role : 'assistant') as Role;
+                    const agentRole = m.additional_kwargs?.agent_role;
+
+                    // Intentar resolver por agent_id primero, luego por agent_role
+                    let foundAgent = agentId ? allAgents.find(a => a.id === agentId) : null;
+                    if (!foundAgent && agentRole) {
+                        foundAgent = allAgents.find(a => a.role === agentRole && a.id !== 'group-chat');
+                    }
+
+                    // Validar que el role es un valor válido de Role (nunca 'assistant')
+                    const VALID_ROLES = ['user', 'system', 'CTO', 'CMO', 'CFO', 'CEO', 'specialist'];
+                    const candidateRole = foundAgent?.role || agentRole;
+                    role = (candidateRole && VALID_ROLES.includes(candidateRole) ? candidateRole : 'CEO') as Role;
+                    resolvedAgentId = foundAgent?.id;
                 }
 
                 // --- LÓGICA DE RECUPERACIÓN DE ARTEFACTOS ---
@@ -381,7 +400,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     role,
                     content: processedContent,
                     timestamp: new Date(m.additional_kwargs?.timestamp || Date.now()),
-                    agentId: m.additional_kwargs?.agent_id || undefined
+                    agentId: resolvedAgentId || m.additional_kwargs?.agent_id || undefined
                 };
             });
 
@@ -546,12 +565,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         }));
                     },
                     onRole: (role) => {
+                        // En grupo, resolver el agente real que responde por su rol
+                        const matchingAgent = allAgents.find(a => a.role === role && a.id !== 'group-chat');
                         set((state) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
                                     msg.id === botMsgId
-                                        ? { ...msg, role: role as Role }
+                                        ? { ...msg, role: role as Role, agentId: matchingAgent?.id || msg.agentId }
                                         : msg
                                 ),
                             },
@@ -586,12 +607,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             },
                         }));
 
-                        // @ts-ignore
-                        window[`__streamingArtifact_${targetSessionId}`] = artifactId;
+                        set(state => ({ streamingArtifactBySession: { ...state.streamingArtifactBySession, [targetSessionId]: artifactId } }));
                     },
                     onArtifactChunk: (content) => {
-                        // @ts-ignore
-                        const artifactId = window[`__streamingArtifact_${targetSessionId}`];
+                        const artifactId = get().streamingArtifactBySession[targetSessionId];
                         if (!artifactId) return;
 
                         set((state) => ({
@@ -601,8 +620,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         }));
                     },
                     onArtifactClose: () => {
-                        // @ts-ignore
-                        window[`__streamingArtifact_${targetSessionId}`] = null;
+                        set(state => ({ streamingArtifactBySession: { ...state.streamingArtifactBySession, [targetSessionId]: null } }));
+                    },
+                    onToolStart: (data) => {
+                        set((state) => ({
+                            messagesBySession: {
+                                ...state.messagesBySession,
+                                [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
+                                    msg.id === botMsgId
+                                        ? { ...msg, content: msg.content + `\n[TOOL_START:${data.tool_name}]\n` }
+                                        : msg
+                                ),
+                            },
+                        }));
+                    },
+                    onToolResult: (data) => {
+                        const truncated = data.result.substring(0, 300);
+                        set((state) => ({
+                            messagesBySession: {
+                                ...state.messagesBySession,
+                                [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
+                                    msg.id === botMsgId
+                                        ? { ...msg, content: msg.content + `\n[TOOL_RESULT:${data.tool_name}:${truncated}]\n` }
+                                        : msg
+                                ),
+                            },
+                        }));
                     },
                     onDone: () => {
                         set((state) => ({
@@ -640,8 +683,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 abortController: null,
                 errorStates: { ...state.errorStates, send_message: sphereError.message }
             }));
-            // @ts-ignore
-            window[`__streamingArtifact_${sessionId}`] = null;
+            set(state => ({ streamingArtifactBySession: { ...state.streamingArtifactBySession, [sessionId!]: null } }));
         }
     },
 
@@ -659,8 +701,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
         // Limpiar referencia de artefacto en streaming si existe
         if (currentSessionId) {
-            // @ts-ignore
-            window[`__streamingArtifact_${currentSessionId}`] = null;
+            set(state => ({ streamingArtifactBySession: { ...state.streamingArtifactBySession, [currentSessionId]: null } }));
         }
     },
     resetState: () => set({

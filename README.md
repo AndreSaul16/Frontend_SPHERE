@@ -9,7 +9,10 @@ Interfaz de usuario ultra-premium diseñada para la orquestación de agentes de 
 - **Midnight Protocol**: Un sistema de diseño oscuro con acentos eléctricos (Cyan, Púrpura, Magenta).
 - **Artifacts Workspace**: Panel lateral interactivo para visualizar y descargar código, tablas de datos, diagramas Mermaid y documentos Markdown.
 - **Multisesión Concurrente**: Gestión de múltiples hilos de chat con streamings independientes y persistentes.
-- **Agent Launcher**: Selector táctico de expertos con buscador instantáneo y creador de agentes personalizados.
+- **Agent Creation Wizard**: Wizard multi-step con 10 templates profesionales (Abogado, Psicólogo, Contador, etc.) y carga de archivos para RAG personalizado.
+- **Knowledge Base Manager**: Gestión visual de documentos por agente con upload, progress bars, polling de status y drag & drop.
+- **Agent Detail Page**: Página completa de edición de agentes con configuración de cerebro (prompt, modelo, temperatura) y knowledge base.
+- **Chat UX Premium**: Búsqueda de mensajes, copiar al clipboard, regenerar respuesta, pin de mensajes, exportar conversación como Markdown, rating de respuestas (thumbs up/down).
 - **SSE Integration**: Recepción de respuestas palabra por palabra para una sensación de fluidez absoluta.
 
 ---
@@ -58,11 +61,17 @@ npm run dev
 
 ## 📂 Estructura de Carpetas
 
-- `src/components`: Componentes UI organizados por contexto (chat, artifacts, sidebar).
+- `src/components/chat`: ChatPanel, MessageBubble (con botones hover UX).
+- `src/components/modals`: AgentSelectorModal, AgentCreationWizard (wizard multi-step).
+- `src/components/agents`: KnowledgeBasePanel (gestión de documentos por agente).
+- `src/components/artifacts`: ArtifactPanel, ArtifactCard.
+- `src/components/sidebar`: Sidebar con historial de sesiones.
+- `src/pages`: AgentDetailPage (edición de agentes), ChatSettingsPage, ProfilePage.
 - `src/store`: Gestión de estado global con Zustand.
-- `src/services`: Cliente API con lógica de streaming SSE.
-- `src/utils`: Motores de detección y utilidades de formato.
+- `src/services`: Cliente API con 22+ métodos (streaming SSE, agents, documents, pins, ratings).
+- `src/utils`: Exportación de chat, detección de artefactos.
+- `src/types`: Interfaces TypeScript (Agent, AgentTemplate, AgentDocument, MessageRating).
 
 ---
 *Firma: SPHERE Implementation Team*
-*Fecha: Febrero, 2026*
+*Fecha: Marzo, 2026*

@@ -7,6 +7,7 @@ import { ArtifactPanel } from "@/components/artifacts/ArtifactPanel";
 import { AgentSelectorModal } from "@/components/modals/AgentSelectorModal";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { ChatSettingsPage } from "@/pages/ChatSettingsPage";
+import { AgentDetailPage } from "@/pages/AgentDetailPage";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorOverlay } from "@/components/common/ErrorOverlay";
 import { useChatStore } from "@/store/useChatStore";
@@ -61,6 +62,15 @@ function App() {
             <MainLayout
               sidebar={<Sidebar />}
               chat={<ChatSettingsPage />}
+            />
+          }
+        />
+        <Route
+          path="/agents/:agentId"
+          element={
+            <MainLayout
+              sidebar={<Sidebar />}
+              chat={<AgentDetailPage />}
             />
           }
         />
