@@ -1,56 +1,24 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-
-# Virtual Environments
-venv/
-env/
-ENV/
-.venv/
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-.windsurf/
-.agent/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment variables
-.env
-.env.local
-
-# Dependencies
-node_modules/
-
-# Data (Bronze Layer - datos RAW no van a Git)
-data/raw/
-
 # Logs
+logs
 *.log
-logs/
-etl/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Temporary files
-temp_*
-*.tmp
-*.bak
-test_output.txt
+node_modules
+dist
+dist-ssr
+*.local
 
-# Database
-*.db
-*.sqlite
-
-# Docker
-.dockerignore
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

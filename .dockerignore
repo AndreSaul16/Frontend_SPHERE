@@ -1,7 +1,6 @@
-__pycache__
-*.pyc
+node_modules
+dist
 .git
-.env
-venv
-.pytest_cache
-.mypy_cache
+# .env (Removido para permitir visibilidad en desarrollo)
+.DS_Store
+coverage
