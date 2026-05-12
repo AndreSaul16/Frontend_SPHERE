@@ -1,0 +1,287 @@
+"""
+Firebase Auth middleware + auto-provisioning de usuarios.
+Verifica ID tokens de Firebase y crea el documento User si no existe.
+"""
+
+import firebase_admin
+from firebase_admin import auth as firebase_auth, credentials
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from app.core.config import settings
+from app.infrastructure.database import get_users_collection
+from app.core.logger import api_logger as logger
+
+security = HTTPBearer(auto_error=False)
+
+_firebase_initialized = False
+
+
+def init_firebase():
+    """Inicializa Firebase Admin SDK. Llamar en lifespan de FastAPI."""
+    global _firebase_initialized
+    if _firebase_initialized:
+        return
+
+    if not settings.FIREBASE_CREDENTIALS_PATH:
+        logger.warning(
+            "FIREBASE_CREDENTIALS_PATH no configurado. "
+            "Auth estará deshabilitado (modo desarrollo)."
+        )
+        return
+
+    try:
+        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+        firebase_admin.initialize_app(cred)
+        _firebase_initialized = True
+        logger.info("Firebase Admin SDK inicializado correctamente")
+    except Exception as e:
+        logger.error(f"Error inicializando Firebase: {e}")
+        raise
+
+
+async def _verify_token(token: str) -> dict:
+    """
+    Verifica un Firebase ID token y retorna los claims decodificados.
+
+    Raises:
+        HTTPException 401 si el token es inválido o expiró.
+        HTTPException 503 si Firebase no está inicializado en producción.
+    """
+    if not _firebase_initialized:
+        # En PROD, auth roto = 503. Nunca degradar silenciosamente a un usuario fake.
+        if settings.is_production:
+            logger.critical(
+                "Firebase NO inicializado en PRODUCCIÓN. "
+                "Rechazando todos los requests autenticados. "
+                "Configura FIREBASE_CREDENTIALS_PATH."
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="Servicio de autenticación no disponible",
+            )
+        # Dev explícito: aceptar un token especial "dev-token" mapeado a dev_user
+        # Cualquier otro token en dev también se rechaza para evitar confusión
+        if token == "dev-token":
+            logger.warning("AUTH DEV MODE: aceptando 'dev-token' → dev_user")
+            return {
+                "uid": "dev_user",
+                "email": "dev@sphere.local",
+                "name": "Dev User",
+            }
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Firebase no configurado en desarrollo. "
+                "Usa Authorization: Bearer dev-token para testing local."
+            ),
+        )
+
+    try:
+        decoded = firebase_auth.verify_id_token(token)
+        return decoded
+    except firebase_auth.ExpiredIdTokenError:
+        raise HTTPException(status_code=401, detail="Token expirado")
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    except Exception as e:
+        logger.error(f"Error verificando token: {e}")
+        raise HTTPException(status_code=401, detail="Error de autenticación")
+
+
+async def _ensure_wallet(uid: str, user_doc: dict) -> dict:
+    """Lazy wallet init: usuarios legacy creados sin campo wallet.
+    Respeta email_verified: si no está verificado, balance=0."""
+    if "wallet" in user_doc:
+        return user_doc
+    from datetime import datetime, timezone
+
+    email_verified = user_doc.get("email_verified", True)
+    pro_messages = settings.plan_messages_map["free"] if email_verified else 0
+
+    users_col = get_users_collection()
+    now = datetime.now(timezone.utc)
+    wallet_init = {
+        "wallet.pro_messages_balance": pro_messages,
+        "wallet.pro_messages_granted_this_period": pro_messages,
+        "wallet.last_period_reset": now,
+        "wallet.topup_messages_balance": 0,
+    }
+    await users_col.update_one(
+        {"firebase_uid": uid},
+        {"$set": wallet_init},
+    )
+    user_doc["wallet"] = {
+        "pro_messages_balance": pro_messages,
+        "pro_messages_granted_this_period": pro_messages,
+        "last_period_reset": now,
+        "topup_messages_balance": 0,
+    }
+    logger.info(f"Wallet inicializado (lazy) para usuario legacy: {uid}")
+    return user_doc
+
+
+async def _auto_provision_user(firebase_claims: dict) -> dict:
+    """
+    Busca o crea el documento User en MongoDB basado en los claims de Firebase.
+    Actualiza last_login_at en cada login.
+    
+    Email verification gate: si email_verified=False en Firebase, el usuario
+    NO recibe créditos gratuitos. Debe verificar su email primero.
+    Dev-token bypass: en modo dev, email_verified se asume True.
+    """
+    from datetime import datetime, timezone
+
+    uid = firebase_claims["uid"]
+    email = firebase_claims.get("email", "")
+    display_name = firebase_claims.get("name", firebase_claims.get("email", "Usuario"))
+    avatar_url = firebase_claims.get("picture")
+    
+    # Email verification gate
+    email_verified = firebase_claims.get("email_verified", False)
+    # Dev-token path: always treated as verified
+    if not _firebase_initialized and settings.is_development:
+        email_verified = True
+
+    users_col = get_users_collection()
+
+    user = await users_col.find_one({"firebase_uid": uid})
+
+    if user:
+        await users_col.update_one(
+            {"firebase_uid": uid},
+            {"$set": {"last_login_at": datetime.now(timezone.utc)}},
+        )
+        user = await _ensure_wallet(uid, user)
+        user.pop("_id", None)
+        return user
+
+    # Auto-provision: crear nuevo usuario (upsert para evitar DuplicateKey en email vacío)
+    now = datetime.now(timezone.utc)
+    
+    # Wallet: solo con créditos si el email está verificado
+    pro_messages = settings.plan_messages_map["free"] if email_verified else 0
+    subscription_status = "active" if email_verified else "email_unverified"
+    
+    new_user = {
+        "firebase_uid": uid,
+        "email": email,
+        "display_name": display_name,
+        "avatar_url": avatar_url,
+        "created_at": now,
+        # last_login_at se maneja en $set para evitar conflicto con $setOnInsert
+        "wallet": {
+            "pro_messages_balance": pro_messages,
+            "pro_messages_granted_this_period": pro_messages,
+            "last_period_reset": now,
+            "topup_messages_balance": 0,
+        },
+        "subscription": {
+            "plan_id": "free",
+            "status": subscription_status,
+        },
+        "email_verified": email_verified,
+        "onboarding_completed": False,
+        "ui_preferences": {
+            "theme": "system",
+            "accent_color": "#7c3aed",
+            "locale": "es-ES",
+            "timezone": "Europe/Madrid",
+            "artifact_default_open": True,
+            "tool_confirmation_level": "destructive_only",
+        },
+        "professional_profile": {
+            "role": None,
+            "industry": None,
+            "company_name": None,
+            "company_stage": None,
+            "team_size": None,
+        },
+        "communication_style": {
+            "tone": "casual",
+            "verbosity": "concise",
+            "language_register": None,
+        },
+        "financial_preferences": {
+            "base_currency": "EUR",
+            "fiscal_year_start_month": 1,
+        },
+        "personal_kb_enabled": True,
+        "feature_flags": [],
+        "connected_providers": [],
+        "usage": {
+            "token_budget_daily": settings.TOKEN_BUDGET_DAILY_DEFAULT,
+            "tokens_used_today": 0,
+            "tokens_reset_at": now,
+            "requests_in_current_window": 0,
+        },
+    }
+
+    # Upsert: inserta si no existe, actualiza last_login_at si ya existe
+    # Evita DuplicateKeyError cuando email="" (dos usuarios sin email)
+    try:
+        await users_col.update_one(
+            {"firebase_uid": uid},
+            {
+                "$setOnInsert": new_user,
+                "$set": {"last_login_at": now},
+            },
+            upsert=True,
+        )
+    except Exception as e:
+        # DuplicateKeyError en email="" — el usuario ya existe, solo actualizar login
+        if "duplicate key" in str(e).lower():
+            logger.debug(
+                f"Usuario ya existe (email duplicado), actualizando login: {uid}"
+            )
+            await users_col.update_one(
+                {"firebase_uid": uid},
+                {"$set": {"last_login_at": now}},
+            )
+        else:
+            raise
+
+    user = await users_col.find_one({"firebase_uid": uid})
+    if user:
+        user = await _ensure_wallet(uid, user)
+        user.pop("_id", None)
+    logger.info(f"Usuario auto-provisionado: {uid} ({email})")
+    return user or new_user
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict:
+    """
+    FastAPI dependency: extrae y verifica el token del header Authorization.
+    Retorna el documento User de MongoDB (con auto-provisioning).
+    """
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Header Authorization requerido. Usa: Bearer <token>",
+        )
+
+    token = credentials.credentials
+    firebase_claims = await _verify_token(token)
+    user = await _auto_provision_user(firebase_claims)
+    return user
+
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict | None:
+    """
+    FastAPI dependency opcional: retorna User si hay token válido, None si no.
+    Útil para endpoints que funcionan con o sin auth (ej: health check).
+    """
+    if credentials is None:
+        return None
+
+    try:
+        token = credentials.credentials
+        firebase_claims = await _verify_token(token)
+        user = await _auto_provision_user(firebase_claims)
+        return user
+    except HTTPException:
+        return None
