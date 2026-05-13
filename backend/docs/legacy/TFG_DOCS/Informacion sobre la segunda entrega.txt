@@ -1,0 +1,39 @@
+Esta segunda entrega busca que documentéis el proceso de desarrollo de vuestro proyecto, evidenciando tanto las decisiones técnicas tomadas como la evolución del trabajo realizado. El objetivo es demostrar vuestra capacidad para implementar la propuesta definida en la apertura, adaptándoos a los imprevistos y documentando tanto el código como el proceso seguido.
+
+
+
+No existe un formato único prescriptivo: podéis estructurar la memoria como un documento técnico tradicional, seguir plantillas de metodologías ágiles con sprints documentados, usar un formato de diario de desarrollo, o combinar enfoques. Lo importante es que la documentación refleje fielmente vuestro trabajo y permita comprender qué se ha construido, cómo y por qué. Obviamente si utilizáis control de versiones de manera correcta, realizáis frecuentes commits que sean claros y bien explicados, la redacción de esta segunda parte no debería costaros mucho tiempo, a falta de adaptaciones en cómo explicáis todo. Os comento también que en esta parte deberíais centraros en los puntos clave y utilizar anexos para la parte más extensa de documentación y memoria (por ejemplo, incluyendo un breve resumen del esquema de vuestra BBDD y referenciar un anexo donde extraigáis los esquemas, modelos y relaciones completas).
+
+Aspectos clave a cubrir
+La memoria debe abordar cuatro pilares fundamentales:
+
+1. Proceso de Desarrollo
+
+Metodología aplicada y adaptaciones realizadas
+Cronología del desarrollo con hitos principales
+Gestión de tareas y evolución del backlog
+Decisiones técnicas críticas y su justificación
+2. Implementación Técnica
+
+Arquitectura del sistema desarrollado
+Componentes principales y su interrelación
+Decisiones de diseño e implementación
+Soluciones a problemas técnicos encontrados
+3. Documentación del Código
+
+Estructura del proyecto y organización de carpetas
+Convenciones de código aplicadas
+Documentación de APIs/endpoints/funciones críticas
+Guías de instalación y configuración
+4. Evidencias y Resultados
+
+Capturas/demos del producto funcionando
+Pruebas realizadas y resultados
+Comparativa entre alcance planificado vs. alcance real
+Estado actual del proyecto y funcionalidades completadas
+Notas de Evaluación
+Agnóstica en formato: No importa la estructura que elijáis siempre que cubráis los cuatro pilares de manera coherente y completa.
+Trazabilidad: Debe haber conexión clara entre lo planificado en la apertura y lo ejecutado. Las desviaciones deben estar explicadas.
+Honestidad técnica: Se valora la reflexión sincera sobre problemas enfrentados y soluciones adoptadas, más que un relato idealizado del desarrollo.
+Utilidad de la documentación: La documentación técnica debe permitir que otra persona pueda entender, instalar y continuar vuestro proyecto.
+Evolución iterativa: Este documento puede (y debe) evolucionar. Tras recibir feedback, podéis seguir mejorando la documentación, marcando en color diferente los cambios realizados posteriores a la corrección inicial.

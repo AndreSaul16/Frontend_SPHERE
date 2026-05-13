@@ -1,10 +1,29 @@
 import { useEffect, useState } from "react";
-import { Search, Plus, MoreVertical, Trash2, Share2 } from "lucide-react";
+import { Search, Plus, MoreVertical, Trash2, Share2, Settings, CreditCard } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/useChatStore";
 import { useUserAvatar } from "@/hooks/useUserAvatar";
+import { useAuth } from "@/contexts/AuthContext";
+
+/**
+ * Extract initials from displayName (e.g., "María García" → "MG")
+ * Falls back to email prefix or "?".
+ */
+function getInitials(displayName: string | null, email: string | null): string {
+    if (displayName) {
+        const parts = displayName.trim().split(/\s+/);
+        if (parts.length >= 2) {
+            return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        }
+        return displayName[0].toUpperCase();
+    }
+    if (email) {
+        return email[0].toUpperCase();
+    }
+    return "?";
+}
 
 export function Sidebar() {
     const {
@@ -19,6 +38,7 @@ export function Sidebar() {
     } = useChatStore();
     const allAgents = [...coreAgents, ...customAgents];
     const userAvatar = useUserAvatar();
+    const { user } = useAuth();
 
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -216,23 +236,56 @@ export function Sidebar() {
             </div>
 
             {/* Footer / User Profile */}
-            <div className="p-3 sm:p-4 border-t border-surface-highlight bg-midnight/30">
+            <div className="p-3 sm:p-4 border-t border-surface-highlight bg-midnight/30 space-y-2">
+                {user ? (
+                    <Link
+                        to="/profile"
+                        onClick={() => toggleSidebar(false)}
+                        className="flex items-center gap-2.5 sm:gap-3 p-2 rounded-xl border border-transparent hover:border-surface-highlight hover:bg-surface/40 transition-all duration-300 group shadow-lg hover:shadow-electric-cyan/5"
+                    >
+                        <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
+                            {userAvatar ? (
+                                <img src={userAvatar} alt="Avatar" className="h-full w-full object-cover" />
+                            ) : user.photoURL ? (
+                                <img src={user.photoURL} alt="Avatar" className="h-full w-full object-cover" />
+                            ) : (
+                                getInitials(user.displayName, user.email)
+                            )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-text-primary group-hover:text-electric-cyan transition-colors truncate">
+                                {user.displayName || user.email || "Usuario"}
+                            </p>
+                            <p className="text-[11px] sm:text-xs text-text-secondary truncate">
+                                {user.email || ""}
+                            </p>
+                        </div>
+                    </Link>
+                ) : (
+                    <div className="flex items-center gap-2.5 sm:gap-3 p-2 rounded-xl border border-transparent opacity-50">
+                        <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-gradient-to-br from-gray-600 to-gray-700 flex items-center justify-center text-white font-bold text-sm">
+                            ?
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-text-secondary truncate">No autenticado</p>
+                        </div>
+                    </div>
+                )}
                 <Link
-                    to="/profile"
+                    to="/billing"
                     onClick={() => toggleSidebar(false)}
-                    className="flex items-center gap-2.5 sm:gap-3 p-2 rounded-xl border border-transparent hover:border-surface-highlight hover:bg-surface/40 transition-all duration-300 group shadow-lg hover:shadow-electric-cyan/5"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-surface/40 border border-transparent hover:border-surface-highlight transition-all text-sm"
                 >
-                    <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-lg group-hover:scale-105 transition-transform overflow-hidden">
-                        {userAvatar ? (
-                            <img src={userAvatar} alt="Avatar" className="h-full w-full object-cover" />
-                        ) : (
-                            "S"
-                        )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-text-primary group-hover:text-electric-cyan transition-colors truncate">Saúl</p>
-                        <p className="text-[11px] sm:text-xs text-text-secondary">Admin</p>
-                    </div>
+                    <CreditCard className="h-4 w-4" />
+                    <span>Facturación</span>
+                </Link>
+                <Link
+                    to="/settings"
+                    onClick={() => toggleSidebar(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-surface/40 border border-transparent hover:border-surface-highlight transition-all text-sm"
+                >
+                    <Settings className="h-4 w-4" />
+                    <span>Configuración</span>
                 </Link>
             </div>
         </div>

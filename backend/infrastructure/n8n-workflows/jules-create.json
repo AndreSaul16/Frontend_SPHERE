@@ -1,0 +1,80 @@
+{
+  "name": "SPHERE - Jules Create Task",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "cto/jules-create",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.jules || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    description: payload.description,\n    repo_url: payload.repo_url || '',\n    branch: payload.branch || 'main',\n    language: payload.language || ''\n  }\n}];"
+      },
+      "id": "code-1",
+      "name": "Extract Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.jules.google/v1/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"description\": {{ JSON.stringify($json.description) }},\n  \"repository\": {{ JSON.stringify($json.repo_url) }},\n  \"branch\": {{ JSON.stringify($json.branch) }},\n  \"language\": {{ JSON.stringify($json.language) }}\n}",
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Jules API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]]
+    },
+    "Extract Credentials": {
+      "main": [[{"node": "Jules API", "type": "main", "index": 0}]]
+    },
+    "Jules API": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "SPHERE" }]
+}

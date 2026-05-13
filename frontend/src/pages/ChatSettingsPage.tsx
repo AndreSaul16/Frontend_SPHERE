@@ -1,9 +1,11 @@
-import { useRef, useState, useEffect } from "react";
-import { ArrowLeft, Save, Camera, Zap, Pencil } from "lucide-react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import { ArrowLeft, Save, Camera, Zap, Pencil, X, Users, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useChatStore, getGroupMembers } from "@/store/useChatStore";
 import { cn } from "@/lib/utils";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
 export function ChatSettingsPage() {
     const navigate = useNavigate();
@@ -15,6 +17,76 @@ export function ChatSettingsPage() {
     const debouncedSave = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const groupMembers = getGroupMembers(agents);
+
+    // Determine if it's a group chat early (needed by hooks below)
+    const isGroupChat = currentSession?.type === 'group' || activeAgent?.id === 'group-chat';
+
+    // Member edit modal state
+    const [editingMember, setEditingMember] = useState<string | null>(null);
+    const [editName, setEditName] = useState("");
+    const [editColor, setEditColor] = useState("");
+
+    // Board Meeting state
+    const [boardEnabled, setBoardEnabled] = useState(false);
+    const [boardLoading, setBoardLoading] = useState(false);
+
+    const getAuthToken = useCallback(async () => {
+        const { getAuth } = await import("firebase/auth");
+        const user = getAuth().currentUser;
+        if (!user) throw new Error("No autenticado");
+        return user.getIdToken();
+    }, []);
+
+    // Load board meeting status for group chats
+    useEffect(() => {
+        if (!isGroupChat) return;
+        (async () => {
+            try {
+                const token = await getAuthToken();
+                const resp = await fetch(`${API_URL}/me/board-settings`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    setBoardEnabled(data.board_meeting_enabled);
+                }
+            } catch { /* ignore */ }
+        })();
+    }, [isGroupChat, getAuthToken]);
+
+    const toggleBoardMeeting = async () => {
+        setBoardLoading(true);
+        try {
+            const token = await getAuthToken();
+            const resp = await fetch(`${API_URL}/me/board-settings`, {
+                method: "PATCH",
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({ board_meeting_enabled: !boardEnabled }),
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                setBoardEnabled(data.board_meeting_enabled);
+            }
+        } catch (e) {
+            console.error("Error toggling board meeting:", e);
+        } finally {
+            setBoardLoading(false);
+        }
+    };
+
+    const openMemberEdit = (member: typeof groupMembers[0]) => {
+        const match = member.name.match(/^(.+?)\s*\(([A-Z]+)\)$/);
+        setEditName(match ? match[1].trim() : member.name);
+        setEditColor(member.hexColor);
+        setEditingMember(member.id);
+    };
+
+    const saveMemberEdit = () => {
+        if (!editingMember) return;
+        useChatStore.getState().renameAgent(editingMember, editName);
+        useChatStore.getState().updateAgentColor(editingMember, editColor);
+        setEditingMember(null);
+    };
 
     if (!activeAgent || !currentSessionId || !currentSession) {
         return (
@@ -65,8 +137,7 @@ export function ChatSettingsPage() {
     const baseName = sessionName || activeAgent.identity?.name || (activeAgent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/)?.[1]?.trim() || activeAgent.name);
     const roleLabel = activeAgent.identity?.role || (activeAgent.name.match(/^(.+?)\s*\(([A-Z]+)\)$/)?.[2] || activeAgent.role);
 
-    // Determine if it's a group chat based on session type if available, or fallback to agent ID
-    const isGroupChat = currentSession?.type === 'group' || activeAgent.id === 'group-chat';
+    // isGroupChat already computed above (before hooks)
 
     // Input controlado con debounce para el nombre
     const [localName, setLocalName] = useState(baseName);
@@ -329,6 +400,40 @@ export function ChatSettingsPage() {
                         </p>
                     </section>
 
+                    {/* Board Meeting Toggle - Only for Group Chats */}
+                    {isGroupChat && (
+                        <section className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-surface/60 border border-surface-highlight backdrop-blur-sm space-y-4">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-purple-400" />
+                                <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">Board Meeting</h2>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium text-text-primary">Debate entre agentes</p>
+                                    <p className="text-[10px] text-text-secondary mt-0.5">Los agentes discuten entre sí antes de responderte (consume más tokens)</p>
+                                </div>
+                                <button
+                                    onClick={toggleBoardMeeting}
+                                    disabled={boardLoading}
+                                    className={cn(
+                                        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                                        boardEnabled ? "bg-electric-cyan" : "bg-surface-highlight",
+                                        boardLoading && "opacity-50"
+                                    )}
+                                >
+                                    {boardLoading ? (
+                                        <Loader2 className="h-4 w-4 animate-spin mx-auto text-text-secondary" />
+                                    ) : (
+                                        <span className={cn(
+                                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                            boardEnabled ? "translate-x-6" : "translate-x-1"
+                                        )} />
+                                    )}
+                                </button>
+                            </div>
+                        </section>
+                    )}
+
                     {/* Group Members Section - Only for Group Chats */}
                     {isGroupChat && (
                         <section className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-surface/60 border border-surface-highlight backdrop-blur-sm space-y-4 sm:space-y-6">
@@ -348,10 +453,7 @@ export function ChatSettingsPage() {
                                             key={member.id}
                                             whileHover={{ scale: 1.02 }}
                                             whileTap={{ scale: 0.98 }}
-                                            onClick={() => {
-                                                useChatStore.getState().selectAgent(member.id);
-                                                navigate('/chat/settings');
-                                            }}
+                                            onClick={() => openMemberEdit(member)}
                                             className="w-full flex items-center gap-3 p-3 rounded-xl bg-midnight/40 border border-surface-highlight hover:border-electric-cyan/30 transition-all"
                                         >
                                             <div
@@ -380,10 +482,96 @@ export function ChatSettingsPage() {
                             </div>
 
                             <p className="text-[10px] sm:text-xs text-text-secondary/40 leading-relaxed text-center">
-                                Haz clic en un miembro para acceder a su configuración individual.
+                                Haz clic en un miembro para personalizar su nombre y color.
                             </p>
                         </section>
                     )}
+
+                    {/* Member Edit Modal */}
+                    <AnimatePresence>
+                        {editingMember && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="bg-surface border border-surface-highlight rounded-2xl p-6 max-w-sm mx-4 space-y-5 w-full"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-semibold text-text-primary">Editar miembro</h3>
+                                        <button onClick={() => setEditingMember(null)} className="p-1.5 hover:bg-surface-highlight rounded-lg text-text-secondary hover:text-text-primary transition-colors">
+                                            <X className="h-4 w-4" />
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] text-text-secondary uppercase tracking-widest font-mono">Nombre</label>
+                                            <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm text-text-primary focus:outline-none focus:border-electric-cyan/50 transition-all"
+                                                placeholder="Ej: Hernesto"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] text-text-secondary uppercase tracking-widest font-mono">Color</label>
+                                            <div className="flex items-center gap-3">
+                                                <div
+                                                    className="h-10 w-10 rounded-xl border-2 cursor-pointer relative overflow-hidden"
+                                                    style={{ borderColor: editColor, backgroundColor: `${editColor}20` }}
+                                                >
+                                                    <input
+                                                        type="color"
+                                                        value={editColor}
+                                                        onChange={(e) => setEditColor(e.target.value)}
+                                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                                    />
+                                                    <div className="h-full w-full flex items-center justify-center">
+                                                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: editColor }} />
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    {['#8A63D2', '#00C1B3', '#E34A95', '#6B8AFD', '#00F0C8'].map(c => (
+                                                        <button
+                                                            key={c}
+                                                            onClick={() => setEditColor(c)}
+                                                            className={cn(
+                                                                "h-7 w-7 rounded-lg border-2 transition-all",
+                                                                editColor === c ? "scale-110 shadow-lg" : "border-transparent opacity-60 hover:opacity-100"
+                                                            )}
+                                                            style={{ backgroundColor: `${c}30`, borderColor: editColor === c ? c : 'transparent' }}
+                                                        >
+                                                            <div className="h-full w-full flex items-center justify-center">
+                                                                <div className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button
+                                            onClick={() => setEditingMember(null)}
+                                            className="flex-1 py-2.5 bg-surface/50 text-text-secondary border border-surface-highlight rounded-xl hover:text-text-primary transition-all text-sm"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            onClick={saveMemberEdit}
+                                            className="flex-1 py-2.5 bg-electric-cyan/10 text-electric-cyan border border-electric-cyan/30 rounded-xl hover:bg-electric-cyan hover:text-midnight transition-all text-sm font-medium"
+                                        >
+                                            Guardar
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
                 </div>
             </div>
         </div>

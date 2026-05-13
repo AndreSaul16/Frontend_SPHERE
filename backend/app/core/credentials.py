@@ -1,0 +1,393 @@
+"""
+Servicio de credenciales OAuth multi-tenant.
+Cifra tokens con Fernet antes de guardarlos en MongoDB.
+Maneja fetch, store, refresh y revoke de tokens por usuario y provider.
+"""
+
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from cryptography.fernet import Fernet, InvalidToken
+from app.core.config import settings
+from app.infrastructure.database import get_oauth_credentials_collection
+from app.core.logger import api_logger as logger
+
+
+class CredentialsService:
+    """
+    Broker de credenciales: el backend es la única fuente de verdad.
+    Los tokens se cifran con Fernet antes de escribir a MongoDB.
+    """
+
+    def __init__(self):
+        if not settings.FERNET_KEY:
+            logger.warning(
+                "FERNET_KEY no configurado. "
+                "Las credenciales NO estarán cifradas (modo desarrollo)."
+            )
+            self._fernet = None
+        else:
+            self._fernet = Fernet(settings.FERNET_KEY.encode())
+
+    def _encrypt(self, token: str) -> bytes:
+        """Cifra un token con Fernet."""
+        if not self._fernet:
+            return token.encode()  # Sin cifrado en modo dev
+        return self._fernet.encrypt(token.encode())
+
+    def _decrypt(self, encrypted: bytes) -> str:
+        """Descifra un token cifrado con Fernet."""
+        if not self._fernet:
+            return encrypted.decode()  # Sin descifrado en modo dev
+        try:
+            return self._fernet.decrypt(encrypted).decode()
+        except InvalidToken:
+            logger.error("Token Fernet inválido — posible cambio de FERNET_KEY")
+            raise ValueError("No se pudo descifrar la credencial")
+
+    async def get_token(self, user_id: str, provider: str) -> Optional[str]:
+        """
+        Obtiene el access token de un usuario para un provider.
+        Refresca automáticamente si está cerca de expirar.
+        """
+        col = get_oauth_credentials_collection()
+        cred = await col.find_one({"user_id": user_id, "provider": provider})
+
+        if not cred:
+            return None
+
+        if cred.get("revoked_at"):
+            logger.debug(f"Credencial {provider} revocada para user {user_id}")
+            return None
+
+        # Auto-refresh si falta <5 min para expirar
+        expires_at = cred.get("expires_at")
+        if expires_at and expires_at < datetime.now(timezone.utc) + timedelta(
+            minutes=5
+        ):
+            logger.info(f"Token {provider} expirando pronto, intentando refresh...")
+            refreshed = await self._refresh_token(user_id, provider, cred)
+            if refreshed:
+                return refreshed
+            # Si el refresh falla, devolver el token actual (quizás aún sirva)
+
+        return self._decrypt(cred["access_token_enc"])
+
+    async def store_token(
+        self,
+        user_id: str,
+        provider: str,
+        access_token: str,
+        refresh_token: Optional[str] = None,
+        scopes: Optional[list[str]] = None,
+        expires_in: Optional[int] = None,
+    ):
+        """
+        Cifra y almacena tokens OAuth para un usuario y provider.
+        Upsert: sobreescribe si ya existe.
+        """
+        col = get_oauth_credentials_collection()
+        now = datetime.now(timezone.utc)
+
+        expires_at = None
+        if expires_in:
+            expires_at = now + timedelta(seconds=expires_in)
+
+        doc = {
+            "user_id": user_id,
+            "provider": provider,
+            "access_token_enc": self._encrypt(access_token),
+            "refresh_token_enc": self._encrypt(refresh_token)
+            if refresh_token
+            else None,
+            "scopes": scopes or [],
+            "expires_at": expires_at,
+            "connected_at": now,
+            "revoked_at": None,
+        }
+
+        await col.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": doc},
+            upsert=True,
+        )
+
+        # Actualizar connected_providers en el user
+        from app.infrastructure.database import get_users_collection
+
+        users_col = get_users_collection()
+        await users_col.update_one(
+            {"firebase_uid": user_id},
+            {"$addToSet": {"connected_providers": provider}},
+        )
+
+        logger.info(f"Token {provider} almacenado para user {user_id}")
+
+    async def revoke(self, user_id: str, provider: str):
+        """Revoca una credencial (soft-delete)."""
+        col = get_oauth_credentials_collection()
+        result = await col.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": {"revoked_at": datetime.now(timezone.utc)}},
+        )
+
+        if result.modified_count > 0:
+            # Remover de connected_providers
+            from app.infrastructure.database import get_users_collection
+
+            users_col = get_users_collection()
+            await users_col.update_one(
+                {"firebase_uid": user_id},
+                {"$pull": {"connected_providers": provider}},
+            )
+            logger.info(f"Credencial {provider} revocada para user {user_id}")
+
+        return result.modified_count > 0
+
+    async def is_connected(self, user_id: str, provider: str) -> bool:
+        """Verifica si un usuario tiene un provider conectado y activo."""
+        col = get_oauth_credentials_collection()
+        cred = await col.find_one(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "revoked_at": None,
+            }
+        )
+        return cred is not None
+
+    async def list_connected(self, user_id: str) -> list[dict]:
+        """Lista los providers conectados del usuario (sin exponer tokens)."""
+        col = get_oauth_credentials_collection()
+        result = []
+        async for cred in col.find({"user_id": user_id, "revoked_at": None}):
+            result.append(
+                {
+                    "provider": cred["provider"],
+                    "scopes": cred.get("scopes", []),
+                    "connected_at": cred.get("connected_at"),
+                    "expires_at": cred.get("expires_at"),
+                    "revoked": False,
+                }
+            )
+        return result
+
+    async def _refresh_token(
+        self, user_id: str, provider: str, cred: dict
+    ) -> Optional[str]:
+        """
+        Intenta refrescar un token expirado.
+        Llama al endpoint de refresh del provider.
+        """
+        import httpx
+
+        refresh_token_enc = cred.get("refresh_token_enc")
+        if not refresh_token_enc:
+            logger.warning(f"No hay refresh_token para {provider} de user {user_id}")
+            return None
+
+        refresh_token = self._decrypt(refresh_token_enc)
+
+        try:
+            if provider == "github":
+                # GitHub tokens de OAuth App no expiran, solo los de GitHub App
+                return self._decrypt(cred["access_token_enc"])
+
+            elif provider == "notion":
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        "https://api.notion.com/v1/oauth/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                        },
+                        auth=(settings.NOTION_CLIENT_ID, settings.NOTION_CLIENT_SECRET),
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    await self.store_token(
+                        user_id,
+                        provider,
+                        access_token=data["access_token"],
+                        refresh_token=data.get("refresh_token"),
+                        expires_in=data.get("expires_in"),
+                    )
+                    return data["access_token"]
+
+            elif provider == "slack":
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        "https://slack.com/api/oauth.v2.access",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                            "client_id": settings.SLACK_CLIENT_ID,
+                            "client_secret": settings.SLACK_CLIENT_SECRET,
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                    if data.get("ok"):
+                        await self.store_token(
+                            user_id,
+                            provider,
+                            access_token=data["access_token"],
+                            refresh_token=data.get("refresh_token"),
+                            expires_in=data.get("expires_in"),
+                        )
+                        return data["access_token"]
+
+        except Exception as e:
+            logger.error(f"Error refrescando token {provider}: {e}")
+            return None
+
+    # ============================================================
+    # SERVICE CREDENTIALS (API Keys for external services)
+    # ============================================================
+
+    async def store_service_credential(
+        self,
+        user_id: str,
+        service: str,
+        api_key: str,
+        credential_type: str = "api_key",
+        metadata: dict = None,
+    ):
+        """
+        Cifra y almacena una credencial de servicio para un usuario.
+        Upsert: sobreescribe si ya existe.
+        """
+        from app.infrastructure.database import get_service_credentials_collection
+        from datetime import datetime, timezone
+
+        col = get_service_credentials_collection()
+        now = datetime.now(timezone.utc)
+
+        doc = {
+            "user_id": user_id,
+            "service": service,
+            "credential_type": credential_type,
+            "key_enc": self._encrypt(api_key),
+            "metadata": metadata or {},
+            "updated_at": now,
+            "revoked_at": None,
+        }
+
+        await col.update_one(
+            {"user_id": user_id, "service": service},
+            {
+                "$set": doc,
+                "$setOnInsert": {"created_at": now},
+            },
+            upsert=True,
+        )
+
+        logger.info(f"Service credential '{service}' almacenada para user {user_id}")
+
+    async def get_service_credential(self, user_id: str, service: str) -> Optional[str]:
+        """
+        Obtiene y descifra la credencial de un servicio para un usuario.
+        Retorna None si no existe o está revocada.
+        """
+        from app.infrastructure.database import get_service_credentials_collection
+
+        col = get_service_credentials_collection()
+        cred = await col.find_one(
+            {
+                "user_id": user_id,
+                "service": service,
+                "revoked_at": None,
+            }
+        )
+
+        if not cred:
+            return None
+
+        return self._decrypt(cred["key_enc"])
+
+    async def get_service_credential_with_metadata(
+        self, user_id: str, service: str
+    ) -> Optional[dict]:
+        """
+        Obtiene la credencial con metadata para un servicio.
+        Retorna dict con 'key' (descifrada) y 'metadata', o None.
+        """
+        from app.infrastructure.database import get_service_credentials_collection
+
+        col = get_service_credentials_collection()
+        cred = await col.find_one(
+            {
+                "user_id": user_id,
+                "service": service,
+                "revoked_at": None,
+            }
+        )
+
+        if not cred:
+            return None
+
+        return {
+            "key": self._decrypt(cred["key_enc"]),
+            "metadata": cred.get("metadata", {}),
+        }
+
+    async def list_service_credentials(self, user_id: str) -> list[dict]:
+        """
+        Lista las credenciales de servicios del usuario (sin exponer keys).
+        """
+        from app.infrastructure.database import get_service_credentials_collection
+
+        col = get_service_credentials_collection()
+        result = []
+        async for cred in col.find({"user_id": user_id, "revoked_at": None}):
+            result.append(
+                {
+                    "id": cred.get("id", str(cred["_id"])),
+                    "service": cred["service"],
+                    "credential_type": cred.get("credential_type", "api_key"),
+                    "metadata": cred.get("metadata", {}),
+                    "created_at": cred.get("created_at"),
+                    "updated_at": cred.get("updated_at"),
+                    "connected": True,
+                }
+            )
+        return result
+
+    async def revoke_service_credential(self, user_id: str, service: str) -> bool:
+        """
+        Revoca una credencial de servicio (soft-delete).
+        """
+        from app.infrastructure.database import get_service_credentials_collection
+        from datetime import datetime, timezone
+
+        col = get_service_credentials_collection()
+        result = await col.update_one(
+            {"user_id": user_id, "service": service},
+            {"$set": {"revoked_at": datetime.now(timezone.utc)}},
+        )
+
+        if result.modified_count > 0:
+            logger.info(f"Service credential '{service}' revocada para user {user_id}")
+            return True
+        return False
+
+    async def load_credentials_for_n8n(self, user_id: str, services: list[str]) -> dict:
+        """
+        Carga credenciales de múltiples servicios para inyectar en payloads de n8n.
+        Retorna dict: {"google_calendar": {"api_key": "...", ...}, ...}
+        """
+        result = {}
+        for service in services:
+            cred = await self.get_service_credential_with_metadata(user_id, service)
+            if cred:
+                result[service] = {
+                    "api_key": cred["key"],
+                    **cred["metadata"],
+                }
+        return result
+
+
+# Instancia global
+credentials_service = CredentialsService()

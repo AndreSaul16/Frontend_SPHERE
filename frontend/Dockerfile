@@ -1,21 +1,40 @@
-# Usamos una imagen ligera de Node.js
-FROM node:20-alpine
+# ---- Stage 1: Build ----
+FROM node:20-alpine AS build
 
-# Directorio de trabajo
 WORKDIR /app
 
-# Copiamos los archivos de dependencias primero para aprovechar el caché
+# Install dependencies (cached layer)
 COPY package*.json ./
+RUN npm ci
 
-# Instalamos dependencias
-RUN npm install
-
-# Copiamos el resto del código
+# Copy source and build
 COPY . .
 
-# Exponemos el puerto de Vite
+# VITE_API_URL: bake into build (fallback for local dev)
+ARG VITE_API_URL=http://localhost:8000/api/v1
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN npm run build
+
+# ---- Stage 2: Production (nginx) ----
+FROM nginx:alpine
+
+# Remove default nginx config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# nginx:alpine procesa automáticamente /etc/nginx/templates/*.template con envsubst
+# expandiendo variables de entorno (entre ellas $PORT inyectada por Railway).
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Copy built assets from build stage
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# Permisos para que el entrypoint default pueda escribir confs procesados.
+RUN chown -R nginx:nginx /usr/share/nginx/html
+
+# Default si Railway no inyecta PORT (dev local).
+ENV PORT=3000
+
 EXPOSE 3000
 
-# Comando por defecto para desarrollo
-# --host 0.0.0.0 es necesario para que sea accesible desde fuera del contenedor
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+# nginx-entrypoint procesa los templates y luego ejecuta nginx -g 'daemon off;'

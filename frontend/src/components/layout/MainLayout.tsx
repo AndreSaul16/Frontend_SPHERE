@@ -3,6 +3,7 @@ import { Menu, X, GripVertical } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/useChatStore";
+import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 
 interface MainLayoutProps {
     sidebar: ReactNode;
@@ -100,7 +101,9 @@ export function MainLayout({ sidebar, chat, artifactPanel, className }: MainLayo
 
             {/* Center Chat - Flexible */}
             <main className="flex-1 h-full relative flex flex-col min-w-0 z-10 bg-transparent">
-                {chat}
+                <ErrorBoundary>
+                    {chat}
+                </ErrorBoundary>
             </main>
 
             {/* Right Artifact Panel */}

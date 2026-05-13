@@ -1,0 +1,80 @@
+{
+  "name": "SPHERE - Google Calendar Create",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "shared/calendar-create",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.google_calendar || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    calendar_id: creds.calendar_id || 'primary',\n    title: payload.title,\n    start_time: payload.start_time,\n    end_time: payload.end_time,\n    description: payload.description || '',\n    attendees: payload.attendees || []\n  }\n}];"
+      },
+      "id": "code-1",
+      "name": "Extract Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ $json.calendar_id }}/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"summary\": \"{{ $json.title }}\",\n  \"description\": \"{{ $json.description }}\",\n  \"start\": {\n    \"dateTime\": \"{{ $json.start_time }}\"\n  },\n  \"end\": {\n    \"dateTime\": \"{{ $json.end_time }}\"\n  },\n  \"attendees\": {{ JSON.stringify($json.attendees.map(email => ({ email }))) }}\n}",
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Google Calendar API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]]
+    },
+    "Extract Credentials": {
+      "main": [[{"node": "Google Calendar API", "type": "main", "index": 0}]]
+    },
+    "Google Calendar API": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "SPHERE" }]
+}

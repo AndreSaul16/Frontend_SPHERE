@@ -16,39 +16,41 @@ class TestHealthEndpoint:
         assert response.status_code == 200
         
         data = response.json()
-        assert data["status"] == "active"
+        assert "status" in data
         assert data["service"] == "SPHERE Orchestrator"
-        assert "database" in data
         
         print(f"\n🏥 Health Check:")
         print(f"   Status: {data['status']}")
-        print(f"   Database: {data['database']}")
-        print(f"   Latency: {data.get('latency_ms')}ms")
+        print(f"   Checks: {data.get('checks', {})}")
 
     @pytest.mark.asyncio
-    async def test_health_check_has_latency(self, async_client):
-        """Test: Health check incluye información de latencia."""
+    async def test_health_check_has_version(self, async_client):
+        """Test: Health check incluye información de versión."""
         response = await async_client.get("/api/v1/health/health")
         
         data = response.json()
-        
-        # La latencia debe estar presente si hay conexión
-        if "connected" in data.get("database", ""):
-            assert data.get("latency_ms") is not None
-            assert isinstance(data["latency_ms"], (int, float))
-            assert data["latency_ms"] > 0
+        assert "version" in data
+        assert data["version"] == "3.0-multi-tenant"
 
     @pytest.mark.asyncio
-    async def test_health_check_lists_collections(self, async_client):
-        """Test: Health check lista las colecciones disponibles."""
+    async def test_health_check_has_checks(self, async_client):
+        """Test: Health check incluye checks de dependencias."""
         response = await async_client.get("/api/v1/health/health")
         
         data = response.json()
+        assert "checks" in data
+        assert isinstance(data["checks"], dict)
+        # MongoDB check should be present
+        assert "mongodb" in data["checks"]
+
+    @pytest.mark.asyncio
+    async def test_liveness_probe(self, async_client):
+        """Test: Liveness probe devuelve alive."""
+        response = await async_client.get("/api/v1/health/live")
         
-        if "connected" in data.get("database", ""):
-            assert "collections" in data
-            assert isinstance(data["collections"], list)
-            print(f"\n📁 Colecciones: {data['collections']}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "alive"
 
 
 if __name__ == "__main__":

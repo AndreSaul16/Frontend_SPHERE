@@ -1,0 +1,87 @@
+{
+  "name": "SPHERE - Google Calendar Availability",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "shared/calendar-availability",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.google_calendar || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    calendar_id: creds.calendar_id || 'primary',\n    date: payload.date,\n    duration_minutes: payload.duration_minutes || 60\n  }\n}];"
+      },
+      "id": "code-1",
+      "name": "Extract Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://www.googleapis.com/calendar/v3/calendars/{{ $json.calendar_id }}/events",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.api_key }}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "timeMin", "value": "={{ $json.date }}T00:00:00Z" },
+            { "name": "timeMax", "value": "={{ $json.date }}T23:59:59Z" },
+            { "name": "singleEvents", "value": "true" },
+            { "name": "orderBy", "value": "startTime" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Google Calendar API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $input.first().json.items || [];\nconst duration = $('Extract Credentials').first().json.duration_minutes;\n\n// Find free slots\nconst busySlots = events.map(e => ({\n  start: new Date(e.start.dateTime || e.start.date),\n  end: new Date(e.end.dateTime || e.end.date)\n}));\n\nconst freeSlots = [];\nconst dayStart = new Date($('Extract Credentials').first().json.date + 'T09:00:00');\nconst dayEnd = new Date($('Extract Credentials').first().json.date + 'T18:00:00');\n\nlet current = new Date(dayStart);\nfor (const busy of busySlots) {\n  if (busy.start > current) {\n    freeSlots.push({ start: new Date(current), end: new Date(busy.start) });\n  }\n  current = new Date(Math.max(current.getTime(), busy.end.getTime()));\n}\nif (current < dayEnd) {\n  freeSlots.push({ start: new Date(current), end: new Date(dayEnd) });\n}\n\nconst available = freeSlots.filter(slot => {\n  const mins = (slot.end - slot.start) / 60000;\n  return mins >= duration;\n}).map(slot => ({\n  start: slot.start.toISOString(),\n  end: slot.end.toISOString(),\n  duration_minutes: Math.round((slot.end - slot.start) / 60000)\n}));\n\nreturn [{ json: { date: $('Extract Credentials').first().json.date, available_slots: available, total_events: events.length } }];"
+      },
+      "id": "code-2",
+      "name": "Calculate Availability",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]] },
+    "Extract Credentials": { "main": [[{"node": "Google Calendar API", "type": "main", "index": 0}]] },
+    "Google Calendar API": { "main": [[{"node": "Calculate Availability", "type": "main", "index": 0}]] },
+    "Calculate Availability": { "main": [[{"node": "Respond", "type": "main", "index": 0}]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "SPHERE" }]
+}

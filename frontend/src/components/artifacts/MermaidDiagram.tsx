@@ -5,6 +5,7 @@ import type { Artifact } from '@/types/artifact';
 
 mermaid.initialize({
     startOnLoad: false,
+    securityLevel: 'strict',
     theme: 'dark',
     themeVariables: {
         primaryColor: '#9D85FF',

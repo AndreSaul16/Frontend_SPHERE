@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ChatPanel } from '../../src/components/chat/ChatPanel';
 import { useChatStore } from '../../src/store/useChatStore';
+import { useBillingStore } from '../../src/store/useBillingStore';
 import { chatService } from '../../src/services/api';
 
 vi.mock('../../src/services/api', () => ({
@@ -41,9 +42,26 @@ vi.mock('framer-motion', () => {
     };
 });
 
+// Mock useNavigate for all tests
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+    const actual = await vi.importActual('react-router-dom');
+    return {
+        ...actual,
+        useNavigate: () => mockNavigate,
+    };
+});
+
 describe('ChatPanel - Comportamiento de UI', () => {
     beforeEach(() => {
         useChatStore.getState().resetState();
+        // Mock billing store to prevent network calls from CreditsIndicator refresh()
+        useBillingStore.setState({
+            plan_id: 'free',
+            pro_messages_balance: 5,
+            topup_messages_balance: 0,
+            refresh: vi.fn().mockResolvedValue(undefined),
+        });
         vi.clearAllMocks();
     });
 
@@ -102,5 +120,59 @@ describe('ChatPanel - Comportamiento de UI', () => {
         await waitFor(() => {
             expect(scrollSpy).toHaveBeenCalled();
         });
+    });
+});
+
+describe('ChatPanel — CreditsIndicator Integration (Task 4.2)', () => {
+    beforeEach(() => {
+        useChatStore.getState().resetState();
+        useBillingStore.setState({
+            plan_id: 'free',
+            pro_messages_balance: 3,
+            topup_messages_balance: 1,
+            refresh: vi.fn().mockResolvedValue(undefined),
+        });
+        vi.clearAllMocks();
+    });
+
+    const renderChatPanel = (id = 'credits-test') => {
+        return render(
+            <MemoryRouter initialEntries={[`/chat/${id}`]}>
+                <Routes>
+                    <Route path="/chat/:sessionId" element={<ChatPanel />} />
+                </Routes>
+            </MemoryRouter>
+        );
+    };
+
+    it('renders CreditsIndicator in the header', () => {
+        useChatStore.setState({ currentSessionId: 'credits-test' });
+        renderChatPanel('credits-test');
+
+        // CreditsIndicator should be rendered with data-testid="credits-indicator"
+        const indicator = screen.getByTestId('credits-indicator');
+        expect(indicator).toBeDefined();
+    });
+
+    it('CreditsIndicator shows free tier label', () => {
+        useBillingStore.setState({
+            plan_id: 'free',
+            pro_messages_balance: 3,
+            topup_messages_balance: 0,
+            refresh: vi.fn().mockResolvedValue(undefined),
+        });
+        useChatStore.setState({ currentSessionId: 'credits-test' });
+        renderChatPanel('credits-test');
+
+        expect(screen.getByText(/Free/i)).toBeDefined();
+    });
+
+    it('CreditsIndicator click navigates to billing', () => {
+        useChatStore.setState({ currentSessionId: 'credits-test' });
+        renderChatPanel('credits-test');
+
+        const indicator = screen.getByTestId('credits-indicator');
+        fireEvent.click(indicator);
+        expect(mockNavigate).toHaveBeenCalledWith('/billing');
     });
 });

@@ -1,68 +1,116 @@
-# 🌌 SPHERE Frontend - Midnight Protocol UI
+<p align="center">
+  <img src="https://img.shields.io/badge/SPHERE-Frontend-purple?style=for-the-badge&labelColor=0D0D1A&color=7C3AED" />
+  <img src="https://img.shields.io/badge/Status-Production--Ready-green?style=for-the-badge&labelColor=0D0D1A&color=10B981" />
+  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&labelColor=0D0D1A&color=3B82F6" />
+</p>
 
-Interfaz de usuario ultra-premium diseñada para la orquestación de agentes de IA. Basada en una estética de "Sala de Guerra" con efectos de glassmorphism, animaciones Aurora y un espacio de trabajo dedicado para artefactos técnicos.
-
----
-
-## ✨ Características Principales
-
-- **Midnight Protocol**: Un sistema de diseño oscuro con acentos eléctricos (Cyan, Púrpura, Magenta).
-- **Artifacts Workspace**: Panel lateral interactivo para visualizar y descargar código, tablas de datos, diagramas Mermaid y documentos Markdown.
-- **Multisesión Concurrente**: Gestión de múltiples hilos de chat con streamings independientes y persistentes.
-- **Agent Launcher**: Selector táctico de expertos con buscador instantáneo y creador de agentes personalizados.
-- **SSE Integration**: Recepción de respuestas palabra por palabra para una sensación de fluidez absoluta.
-
----
-
-## 🛠️ Stack Tecnológico
-
-- **Framework**: React 18 + Vite
-- **Estado Global**: Zustand (Tipado y Persistente)
-- **Estilos**: Tailwind CSS v4 (Modern Design Tokens)
-- **Animaciones**: Framer Motion
-- **Visualización**: Mermaid.js, React-Syntax-Highlighter, React-Markdown.
-- **Iconografía**: Lucide React
+<h1 align="center">SPHERE Frontend</h1>
+<p align="center"><b>UI React para la Plataforma Multi-Agente</b></p>
+<p align="center">
+  Interfaz de chat con streaming SSE, artefactos interactivos,<br/>
+  gestión de agentes custom y sistema de RAG.
+</p>
 
 ---
 
-## 🏗️ Arquitectura de la Interfaz
+## Stack
 
-La aplicación se organiza en componentes modulares:
+| Capa | Tecnología | Por qué |
+|------|-----------|---------|
+| **Framework** | React 19 | Rendimiento, ecosistema maduro |
+| **Build** | Vite 7 | HMR rápido, TypeScript nativo |
+| **Estado** | Zustand 5 | Simple, sin boilerplate |
+| **Estilos** | Tailwind CSS v4 | Utility-first, design system |
+| **Auth** | Firebase Auth | Google/GitHub social login |
+| **Testing** | Vitest + MSW | Integrado con Vite |
 
-- **Layout**: Sistema de paneles redimensionables mediante arrastre manual.
-- **Store**: Cerebro reactivo único que centraliza la sincronización con el cluster de Atlas.
-- **Artifacts Engine**: Detector inteligente basado en Regex que extrae bloques técnicos del flujo de texto e inyecta tarjetas interactivas.
-- **Aurora Effects**: Sistema de partículas y degradados dinámicos para el fondo inmersivo.
+## Quick Start
 
----
+### Prerrequisitos
 
-## 🚀 Instalación y Desarrollo
+- Node.js 20+
+- Firebase project
+- Backend corriendo (o URL de Railway)
 
-### 1. Requisitos
-- Node.js 18+
-- Backend de SPHERE activo.
+### Paso 1: Configurar
 
-### 2. Configuración
-Instala las dependencias necesarias:
 ```bash
+# Clonar
+git clone https://github.com/AndreSaul16/Frontend_SPHERE.git
+cd Frontend_SPHERE
+
+# Instalar dependencias
 npm install
+
+# Copiar variables de entorno
+cp .env.example .env
+# Editar .env con tus credenciales de Firebase
 ```
 
-### 3. Ejecución
-Inicia el entorno de desarrollo:
+### Paso 2: Ejecutar
+
 ```bash
+# Desarrollo local
 npm run dev
 ```
 
----
+### Paso 3: Verificar
 
-## 📂 Estructura de Carpetas
+```bash
+# Abrir en browser
+open http://localhost:3000
+```
 
-- `src/components`: Componentes UI organizados por contexto (chat, artifacts, sidebar).
-- `src/store`: Gestión de estado global con Zustand.
-- `src/services`: Cliente API con lógica de streaming SSE.
-- `src/utils`: Motores de detección y utilidades de formato.
+## Docker
 
----
-*Firma: SPHERE Implementation Team*
-*Fecha: Febrero, 2026*
+```bash
+# Build
+docker build -t sphere-frontend .
+
+# Run
+docker run -p 3000:3000 sphere-frontend
+```
+
+## Estructura
+
+```
+frontend/
+├── src/
+│   ├── components/        # Chat, Sidebar, Artifacts, Modals
+│   ├── store/             # Zustand store
+│   ├── services/          # API client (REST + SSE)
+│   ├── pages/             # Login, Profile, Settings
+│   ├── contexts/          # AuthContext (Firebase)
+│   ├── types/             # TypeScript interfaces
+│   └── lib/               # Firebase config, utils
+├── tests/                 # Tests con Vitest + MSW
+├── Dockerfile
+└── package.json
+```
+
+## Scripts
+
+```bash
+# Desarrollo
+npm run dev
+
+# Build producción
+npm run build
+
+# Preview build
+npm run preview
+
+# Tests
+npm test
+
+# Lint
+npm run lint
+```
+
+## Deploy
+
+Ver [RAILWAY.md](RAILWAY.md) para deployment en Railway.
+
+## Licencia
+
+MIT License

@@ -1,4 +1,17 @@
-# Python
+# ===========================
+# SPHERE — .gitignore
+# ===========================
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.env.bak
+*.env.7z
+*firebase-adminsdk*.json
+credentials/
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
@@ -8,49 +21,51 @@ __pycache__/
 dist/
 build/
 .pytest_cache/
+*.egg
 
-# Virtual Environments
+# --- Virtual Environments ---
 venv/
 env/
 ENV/
 .venv/
 
-# IDEs
+# --- Node / Frontend ---
+node_modules/
+dist-ssr/
+*.local
+coverage/
+
+# --- IDE & Editors ---
 .vscode/
 .idea/
 *.swp
 *.swo
+*.swn
 .windsurf/
 .agent/
 
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db
 
-# Environment variables
-.env
-.env.local
-
-# Dependencies
-node_modules/
-
-# Data (Bronze Layer - datos RAW no van a Git)
-data/raw/
-
-# Logs
+# --- Logs ---
 *.log
 logs/
-etl/logs/
 
-# Temporary files
+# --- Temporary files ---
 temp_*
 *.tmp
 *.bak
 test_output.txt
 
-# Database
+# --- Database ---
 *.db
 *.sqlite
 
-# Docker
+# --- Docker ---
 .dockerignore
+
+# --- Build artifacts ---
+build_log.txt
+status_backend.txt
+status_frontend.txt

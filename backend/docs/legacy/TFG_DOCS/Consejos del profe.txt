@@ -1,0 +1,15 @@
+los comentarios de mi primera entrega para mejroar:
+Comentarios
+Para futuros cambios que hagas, utiliza un color diferente en el texto (e.g. azul).
+
+
+
+Buen trabajo, hay detalles como (1) conectar la parte económica con la planificación anterior, (2) emplear las fuentes bibliográficas en el texto en sí que has redactado, ya que esto queda mucho más fiel a estándares académicos, y una priorización y mapas de dependencias que son mejorables, pero hay grandes diferencias, bien hecho.
+
+
+
+El resumen de los comentarios:
+
+
+
+Has hecho un gran trabajo al preparar la parte económica, mostrando un presupuesto bien explicado y pensando en cómo sería rentable tu proyecto. Además, propusiste diferentes formas de comercializarlo y analizaste si sería viable, lo cual está muy bien. Para mejorar aún más, podrías explorar opciones educativas y buscar otras formas de financiar tu idea usando los costes operacionales que ya incluiste. Si conectas el desglose de inversión inicial con las fases anteriores del proyecto, esta sección quedaría perfecta. En la parte de decisiones de recursos, lograste definir bien los módulos y funcionalidades, y organizaste el trabajo con un cronograma realista. Sin embargo, te recomiendo que profundices en la priorización y en el mapa de dependencias entre tareas para que tu planificación sea aún más clara. Sobre el stack tecnológico, tu análisis es muy completo y coherente, lo que te ayudará a anticipar posibles retos y cambios durante el desarrollo. Para alcanzar la máxima nota, podrías añadir una comparación más detallada entre las alternativas y explicar por qué elegiste cada tecnología. Por último, tu análisis de las necesidades de negocio está bien estructurado y justificado, pero sería ideal que incluyeras más fuentes, como artículos, podcasts o investigaciones, para respaldar tus argumentos y hacerlos más sólidos. Si sigues estos consejos, tu trabajo será aún más profesional y convincente.

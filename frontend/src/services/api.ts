@@ -4,9 +4,34 @@ if (!import.meta.env.VITE_API_URL) {
     console.warn("VITE_API_URL is undefined, using fallback: http://localhost:8000/api/v1");
 }
 
-export interface ChatResponse {
-    role: string;
-    response: string;
+/**
+ * Obtiene el token de Firebase Auth del usuario actual.
+ * Se llama en cada request para asegurar que el token es fresco.
+ */
+async function getAuthToken(): Promise<string | null> {
+    try {
+        const { getAuth } = await import("firebase/auth");
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user) return null;
+        return await user.getIdToken();
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Headers con Bearer token inyectado automáticamente.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+    };
+    const token = await getAuthToken();
+    if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+    }
+    return headers;
 }
 
 export interface StreamCallbacks {
@@ -16,41 +41,14 @@ export interface StreamCallbacks {
     onArtifactOpen?: (data: { title: string; artifact_type: string; language: string }) => void;
     onArtifactChunk?: (content: string) => void;
     onArtifactClose?: () => void;
+    // TOOL EXECUTION: 2-event protocol for tool visibility
+    onToolStart?: (data: { tool_name: string; args: Record<string, any> }) => void;
+    onToolResult?: (data: { tool_name: string; result: string }) => void;
     onDone?: () => void;
     onError?: (error: any) => void;
 }
 
 export const chatService = {
-    /**
-     * Envía un mensaje al orquestador SPHERE (Síncrono/Legacy).
-     * @param message El texto del usuario.
-     * @param targetRole (Opcional) Rol específico del agente (CTO, CFO, etc.) o undefined para modo orquestado.
-     */
-    async sendMessage(message: string, targetRole?: string): Promise<ChatResponse> {
-        try {
-            const response = await fetch(`${API_URL}/chat/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    query: message,
-                    target_role: targetRole,
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error(`Error del servidor: ${response.status}`);
-            }
-
-            const data = await response.json();
-            return data as ChatResponse;
-        } catch (error) {
-            console.error('Error en chatService (sendMessage):', error);
-            throw error;
-        }
-    },
-
     /**
      * Inicia un flujo SSE para recibir tokens en tiempo real.
      * @param signal - AbortSignal opcional para cancelar la petición si el usuario navega a otro chat.
@@ -63,17 +61,32 @@ export const chatService = {
         signal?: AbortSignal
     ) {
         try {
+            const token = await getAuthToken();
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers["Authorization"] = `Bearer ${token}`;
+            }
+
             const response = await fetch(`${API_URL}/stream/`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers,
                 body: JSON.stringify({ query, session_id: sessionId, target_role: targetRole }),
                 signal, // Permite cancelar la petición desde fuera
             });
 
-            if (!response.ok) throw new Error(response.statusText);
+            if (!response.ok) {
+                const { handleResponseError } = await import('./errorHandler');
+                const err = await handleResponseError(response);
+                throw new Error(err.message);
+            }
             if (!response.body) throw new Error("No response body");
+
+            // Stream OK → decremento optimista. Reconciliamos al [DONE] llamando a refresh.
+            import('../store/useBillingStore').then(({ useBillingStore }) => {
+                useBillingStore.getState().decrementOptimistic();
+            });
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -103,6 +116,10 @@ export const chatService = {
                     const dataStr = trimmed.replace('data: ', '').trim();
 
                     if (dataStr === '[DONE]') {
+                        // Reconciliamos balance con el backend (incluye posible cargo extra >4k tokens).
+                        import('../store/useBillingStore').then(({ useBillingStore }) => {
+                            useBillingStore.getState().refresh();
+                        });
                         callbacks.onDone?.();
                         return;
                     }
@@ -131,6 +148,16 @@ export const chatService = {
                             callbacks.onArtifactChunk?.(data.content);
                         } else if (data.type === 'artifact_close') {
                             callbacks.onArtifactClose?.();
+                        } else if (data.type === 'tool_start') {
+                            callbacks.onToolStart?.({
+                                tool_name: data.tool_name || 'unknown',
+                                args: data.args || {},
+                            });
+                        } else if (data.type === 'tool_result') {
+                            callbacks.onToolResult?.({
+                                tool_name: data.tool_name || 'unknown',
+                                result: data.result || '',
+                            });
                         } else if (data.type === 'error') {
                             throw new Error(data.message || 'Unknown server error');
                         }
@@ -162,23 +189,23 @@ export const chatService = {
      */
     async createSession(params: {
         title?: string;
-        base_agent_id?: string; // or role
+        base_agent_id?: string;
+        agent_ref_type?: string;
         role?: string; // Backwards compatibility helper
         visual_config?: any;
         user_id?: string;
         type?: string;
         members?: string[];
     }): Promise<any> {
-        // Map 'role' to 'base_agent_id' if needed or prioritize base_agent_id
         const finalBaseAgentId = params.base_agent_id || params.role || 'CEO';
 
         const response = await fetch(`${API_URL}/sessions/`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await authHeaders(),
             body: JSON.stringify({
                 title: params.title,
-                user_id: params.user_id || "default_user",
                 base_agent_id: finalBaseAgentId,
+                agent_ref_type: params.agent_ref_type,
                 visual_config: params.visual_config,
                 type: params.type,
                 members: params.members
@@ -191,8 +218,9 @@ export const chatService = {
     },
 
     async getSessions(): Promise<any[]> {
-        const response = await fetch(`${API_URL}/sessions/`);
-        if (!response.ok) {
+        const response = await fetch(`${API_URL}/sessions/`, {
+            headers: await authHeaders(),
+        });        if (!response.ok) {
             throw new Error(`Error fetching sessions: ${response.status}`);
         }
         return response.json();
@@ -201,7 +229,7 @@ export const chatService = {
     async updateSession(sessionId: string, updates: { title?: string, visual_config?: any, enabled_tools?: string[], members?: string[] }): Promise<any> {
         const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await authHeaders(),
             body: JSON.stringify(updates)
         });
         if (!response.ok) {
@@ -211,20 +239,25 @@ export const chatService = {
     },
 
     async getSessionHistory(sessionId: string): Promise<any> {
-        const response = await fetch(`${API_URL}/sessions/${sessionId}/history`);
+        const response = await fetch(`${API_URL}/sessions/${sessionId}/history`, {
+            headers: await authHeaders(),
+        });
+        if (!response.ok) throw new Error(`Error fetching history: ${response.status}`);
         return response.json();
     },
 
     // --- AGENTS CUSTOM ---
     async getCustomAgents(): Promise<any[]> {
-        const response = await fetch(`${API_URL}/agents/`);
+        const response = await fetch(`${API_URL}/agents/`, {
+            headers: await authHeaders(),
+        });
         return response.json();
     },
 
-    async createCustomAgent(data: { identity: any, brain_config: any, owner_user_id?: string, is_public?: boolean }): Promise<any> {
+    async createCustomAgent(data: { identity: any, brain_config: any, is_public?: boolean }): Promise<any> {
         const response = await fetch(`${API_URL}/agents/`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await authHeaders(),
             body: JSON.stringify(data)
         });
         return response.json();
@@ -232,7 +265,8 @@ export const chatService = {
 
     async deleteSession(sessionId: string): Promise<void> {
         const response = await fetch(`${API_URL}/sessions/${sessionId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: await authHeaders(),
         });
         if (!response.ok) {
             throw new Error(`Error deleting session: ${response.status}`);
@@ -240,6 +274,248 @@ export const chatService = {
     },
 
     async deleteCustomAgent(agentId: string): Promise<void> {
-        await fetch(`${API_URL}/agents/${agentId}`, { method: 'DELETE' });
+        await fetch(`${API_URL}/agents/${agentId}`, {
+            method: 'DELETE',
+            headers: await authHeaders(),
+        });
+    },
+
+    // --- AGENT UPDATE ---
+    async updateCustomAgent(agentId: string, data: any): Promise<any> {
+        const response = await fetch(`${API_URL}/agents/${agentId}`, {
+            method: 'PATCH',
+            headers: await authHeaders(),
+            body: JSON.stringify(data)
+        });
+        if (!response.ok) throw new Error(`Error updating agent: ${response.status}`);
+        return response.json();
+    },
+
+    // --- TEMPLATES ---
+    async getAgentTemplates(category?: string): Promise<any[]> {
+        const url = category
+            ? `${API_URL}/agents/templates?category=${category}`
+            : `${API_URL}/agents/templates`;
+        const response = await fetch(url, {
+            headers: await authHeaders(),
+        });
+        return response.json();
+    },
+
+    // --- DOCUMENTS (RAG) ---
+    uploadAgentDocument(agentId: string, file: File, onProgress?: (pct: number) => void): Promise<any> {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const token = await getAuthToken();
+                const xhr = new XMLHttpRequest();
+                const formData = new FormData();
+                formData.append('file', file);
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable && onProgress) {
+                        onProgress(Math.round((e.loaded / e.total) * 100));
+                    }
+                });
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(JSON.parse(xhr.responseText));
+                    } else {
+                        reject(new Error(`Upload failed: ${xhr.status}`));
+                    }
+                });
+                xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+                xhr.open('POST', `${API_URL}/agents/${agentId}/documents`);
+                if (token) {
+                    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                }
+                xhr.send(formData);
+            } catch (err) {
+                reject(err);
+            }
+        });
+    },
+
+    async getAgentDocuments(agentId: string): Promise<any> {
+        const response = await fetch(`${API_URL}/agents/${agentId}/documents`, {
+            headers: await authHeaders(),
+        });
+        return response.json();
+    },
+
+    async deleteAgentDocument(agentId: string, fileId: string): Promise<void> {
+        await fetch(`${API_URL}/agents/${agentId}/documents/${fileId}`, {
+            method: 'DELETE',
+            headers: await authHeaders(),
+        });
+    },
+
+    // --- PINS ---
+    async pinMessage(sessionId: string, messageId: string): Promise<void> {
+        await fetch(`${API_URL}/sessions/${sessionId}/pins`, {
+            method: 'POST',
+            headers: await authHeaders(),
+            body: JSON.stringify({ message_id: messageId })
+        });
+    },
+
+    async unpinMessage(sessionId: string, messageId: string): Promise<void> {
+        await fetch(`${API_URL}/sessions/${sessionId}/pins/${messageId}`, {
+            method: 'DELETE',
+            headers: await authHeaders(),
+        });
+    },
+
+    async getPins(sessionId: string): Promise<string[]> {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}/pins`, {
+            headers: await authHeaders(),
+        });
+        const data = await response.json();
+        return data.pinned_messages || [];
+    },
+
+    // --- RATINGS ---
+    async rateMessage(sessionId: string, messageId: string, rating: 'up' | 'down', feedback?: string): Promise<void> {
+        await fetch(`${API_URL}/sessions/${sessionId}/ratings`, {
+            method: 'POST',
+            headers: await authHeaders(),
+            body: JSON.stringify({ message_id: messageId, rating, feedback })
+        });
     }
+};
+
+
+// ============================================================
+// USER PROFILE, INTEGRATIONS, CONTACTS, OVERRIDES
+// ============================================================
+
+export interface UserProfile {
+    firebase_uid: string;
+    email: string;
+    display_name: string;
+    avatar_url?: string | null;
+    onboarding_completed?: boolean;
+    ui_preferences?: {
+        theme?: "dark" | "light" | "system";
+        accent_color?: string;
+        locale?: string;
+        timezone?: string;
+        artifact_default_open?: boolean;
+        tool_confirmation_level?: "always" | "destructive_only" | "never";
+    };
+    professional_profile?: {
+        role?: string | null;
+        industry?: string | null;
+        company_name?: string | null;
+        company_stage?: string | null;
+        team_size?: number | null;
+    };
+    communication_style?: {
+        tone?: "formal" | "casual";
+        verbosity?: "concise" | "detailed";
+        language_register?: string | null;
+    };
+    financial_preferences?: {
+        base_currency?: string;
+        fiscal_year_start_month?: number;
+    };
+    personal_kb_enabled?: boolean;
+    feature_flags?: string[];
+    connected_providers?: string[];
+    usage?: {
+        token_budget_daily?: number;
+        tokens_used_today?: number;
+        tokens_reset_at?: string;
+        requests_in_current_window?: number;
+    };
+}
+
+export interface Integration {
+    provider: string;
+    connected_at?: string;
+    scopes?: string[];
+    expires_at?: string | null;
+}
+
+export interface IntegrationsList {
+    connected: Integration[];
+    available: string[];
+    status: Record<string, boolean>;
+}
+
+export interface Contact {
+    _id?: string;
+    type: "email" | "phone" | "slack_channel" | "github_user" | "linkedin_handle";
+    value: string;
+    display_name?: string | null;
+    authorized_for: string[];
+    added_at?: string;
+}
+
+export interface AgentOverride {
+    agent_role: string;
+    system_prompt_addition?: string | null;
+    temperature_override?: number | null;
+    model_override?: string | null;
+    updated_at?: string;
+}
+
+async function req<T = any>(
+    path: string,
+    init?: RequestInit & { json?: any }
+): Promise<T> {
+    const headers = await authHeaders();
+    const { json, ...rest } = init || {};
+    const response = await fetch(`${API_URL}${path}`, {
+        ...rest,
+        headers: { ...headers, ...(rest.headers as any) },
+        body: json !== undefined ? JSON.stringify(json) : rest.body,
+    });
+    if (!response.ok) {
+        const { handleResponseError } = await import('./errorHandler');
+        const err = await handleResponseError(response);
+        throw new Error(`${err.status} ${err.code}: ${err.message}`);
+    }
+    if (response.status === 204) return undefined as unknown as T;
+    return response.json();
+}
+
+export const profileService = {
+    getProfile: () => req<UserProfile>("/me"),
+    updateProfile: (updates: Partial<UserProfile>) =>
+        req<UserProfile>("/me", { method: "PATCH", json: updates }),
+    completeOnboarding: () =>
+        req<UserProfile>("/me/onboarding/complete", { method: "POST" }),
+    getUsage: () => req<UserProfile["usage"]>("/me/usage"),
+};
+
+export const integrationsService = {
+    list: () => req<IntegrationsList>("/integrations/"),
+    // Pide al backend la URL de autorización (con Bearer token) y redirige.
+    connect: async (provider: string) => {
+        const { authorize_url } = await req<{ authorize_url: string }>(
+            `/integrations/${provider}/connect`
+        );
+        window.location.href = authorize_url;
+    },
+    disconnect: (provider: string) =>
+        req<void>(`/integrations/${provider}`, { method: "DELETE" }),
+};
+
+export const contactsService = {
+    list: () => req<Contact[]>("/me/contacts"),
+    add: (contact: Omit<Contact, "_id" | "added_at">) =>
+        req<Contact>("/me/contacts", { method: "POST", json: contact }),
+    remove: (contactId: string) =>
+        req<void>(`/me/contacts/${contactId}`, { method: "DELETE" }),
+};
+
+export const agentOverridesService = {
+    list: () => req<AgentOverride[]>("/me/agent-overrides"),
+    upsert: (agentRole: string, override: Partial<AgentOverride>) =>
+        req<AgentOverride>(`/me/agent-overrides/${agentRole}`, {
+            method: "PUT",
+            json: override,
+        }),
+    remove: (agentRole: string) =>
+        req<void>(`/me/agent-overrides/${agentRole}`, { method: "DELETE" }),
 };

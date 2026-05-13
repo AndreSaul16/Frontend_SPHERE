@@ -1,8 +1,0 @@
-requests==2.31.0
-beautifulsoup4==4.12.3
-trafilatura==1.6.3    # Una joya para limpiar texto de blogs
-pypdf==3.17.4         # Para leer tus PDFs manuales
-pymongo==4.6.3        # Para guardar en Atlas
-python-dotenv==1.0.0  # Para leer tus claves del .env raíz
-feedparser==6.0.10    # Para leer RSS/Atom feeds
-lxml==5.1.0           # Parser XML para ArXiv y BeautifulSoup
