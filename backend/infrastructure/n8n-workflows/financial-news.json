@@ -1,0 +1,67 @@
+{
+  "name": "SPHERE - Financial News",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "cfo/financial-news",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.financial_api || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    topic: payload.topic || 'business',\n    limit: payload.limit || 10\n  }\n}];"
+      },
+      "id": "code-1",
+      "name": "Extract Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.alphavantage.co/query",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "function", "value": "NEWS_SENTIMENT" },
+            { "name": "apikey", "value": "={{ $json.api_key }}" },
+            { "name": "topics", "value": "={{ $json.topic }}" },
+            { "name": "limit", "value": "={{ $json.limit }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "Alpha Vantage API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]] },
+    "Extract Credentials": { "main": [[{"node": "Alpha Vantage API", "type": "main", "index": 0}]] },
+    "Alpha Vantage API": { "main": [[{"node": "Respond", "type": "main", "index": 0}]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "SPHERE" }]
+}

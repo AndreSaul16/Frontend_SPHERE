@@ -48,11 +48,11 @@ Chain strategy: stacked-to-main
 
 ## Phase 4: Frontend UI Integration
 
-- [ ] 4.1 Add `Link to="/billing"` labeled "Facturación" in Sidebar footer between profile and settings links (`Sidebar.tsx:237-244`)
-- [ ] 4.2 Import and render `<CreditsIndicator>` in ChatPanel header near search/pin buttons (`ChatPanel.tsx:278-280`)
-- [ ] 4.3 Replace hardcoded "Saúl"/"Admin" (`Sidebar.tsx:233-234`) with `user.displayName`/`user.email` from `useAuth()`; fallback to email if no displayName
+- [x] 4.1 Add `Link to="/billing"` labeled "Facturación" in Sidebar footer between profile and settings links (`Sidebar.tsx:274-281`)
+- [x] 4.2 Import and render `<CreditsIndicator>` in ChatPanel header near search/pin buttons (`ChatPanel.tsx:279`); updated CreditsIndicator to show plan tier labels (Free/Starter/Premium)
+- [x] 4.3 Replace hardcoded "Saúl"/"Admin" (`Sidebar.tsx:233-234`) with `user.displayName`/`user.email` from `useAuth()`; fallback to email if no displayName; `getInitials()` for avatar; logged-out state handled
 
 ## Phase 5: ErrorBoundary & Polish
 
-- [ ] 5.1 Create `frontend/src/components/ErrorBoundary.tsx` — class component with `componentDidCatch`, fallback UI showing "Algo salió mal" message + retry button, error logging
-- [ ] 5.2 Wrap `<AuthenticatedApp>` in `App.tsx` with `<ErrorBoundary>`
+- [x] 5.1 Create `frontend/src/components/shared/ErrorBoundary.tsx` — class component with `componentDidCatch`, fallback UI showing "Algo salió mal" message + retry button, error logging
+- [x] 5.2 Wrap `<main>` content in `MainLayout.tsx` with `<ErrorBoundary>` (NOT entire App — sidebar/header survive as spec requires). 23 new frontend tests written (4 test files). Tests blocked by Node 26 + vitest incompatibility; verified with `npx tsc --noEmit`.

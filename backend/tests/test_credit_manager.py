@@ -153,3 +153,72 @@ def test_adjust_after_completion_insufficient_for_extra(sync_db, credit_manager)
     tx = sync_db["credit_transactions"].find_one({"_id": ctx.tx_id})
     assert tx["extra_charge_outstanding"] is True
     assert tx["counted_as_messages"] == 1  # No se pudo cobrar el extra
+
+
+# ---------------------------------------------------------------------------
+# Task 3.6 — Plan-varied fixture verification tests
+# ---------------------------------------------------------------------------
+
+
+class TestPlanVariedFixtures:
+    """Verifica que los fixtures por plan tengan los balances correctos."""
+
+    def test_free_user_fixture_has_correct_balance(self, free_user_profile):
+        """Free user: 5 mensajes, plan_id='free'."""
+        assert free_user_profile["subscription"]["plan_id"] == "free"
+        assert free_user_profile["wallet"]["pro_messages_balance"] == 5
+        assert free_user_profile["wallet"]["topup_messages_balance"] == 0
+
+    def test_starter_user_fixture_has_correct_balance(self, starter_user_profile):
+        """Starter user: 50 mensajes, plan_id='starter'."""
+        assert starter_user_profile["subscription"]["plan_id"] == "starter"
+        assert starter_user_profile["wallet"]["pro_messages_balance"] == 50
+        assert starter_user_profile["wallet"]["topup_messages_balance"] == 0
+
+    def test_premium_user_fixture_has_correct_balance(self, premium_user_profile):
+        """Premium user: 100 mensajes, plan_id='premium'."""
+        assert premium_user_profile["subscription"]["plan_id"] == "premium"
+        assert premium_user_profile["wallet"]["pro_messages_balance"] == 100
+        assert premium_user_profile["wallet"]["topup_messages_balance"] == 0
+
+
+# ── 4k Token Cap Boundary Tests ────────────────────────────────
+
+
+def test_4k_token_cap_triggers_extra_charge(sync_db, credit_manager):
+    """>4000 tokens total → extra charge (+1 crédito más)."""
+    from app.application.credit_manager import TOKEN_CAP_PER_MESSAGE
+
+    setup_user(sync_db, "test_cap_trigger", pro_balance=5, topup_balance=0)
+    ctx = credit_manager.reserve_and_charge("test_cap_trigger", "agent_1", "deepseek-v4-pro")
+
+    # Justo encima del cap: 4001 tokens
+    credit_manager.adjust_after_completion(
+        ctx, tokens_in=2000, tokens_out=2001, cost_usd_actual=0.01
+    )
+
+    user = sync_db["users"].find_one({"firebase_uid": "test_cap_trigger"})
+    assert user["wallet"]["pro_messages_balance"] == 3, (
+        f"Expected 3 (5 - 1 initial - 1 extra), got {user['wallet']['pro_messages_balance']}"
+    )
+    tx = sync_db["credit_transactions"].find_one({"_id": ctx.tx_id})
+    assert tx["counted_as_messages"] == 2
+
+
+def test_exactly_4k_tokens_no_extra_charge(sync_db, credit_manager):
+    """Exactamente 4000 tokens NO disparan el extra (>4000, estricto)."""
+    setup_user(sync_db, "test_cap_exact", pro_balance=5, topup_balance=0)
+    ctx = credit_manager.reserve_and_charge("test_cap_exact", "agent_1", "deepseek-v4-pro")
+
+    # Exactamente en el cap: 4000 tokens
+    credit_manager.adjust_after_completion(
+        ctx, tokens_in=2000, tokens_out=2000, cost_usd_actual=0.008
+    )
+
+    user = sync_db["users"].find_one({"firebase_uid": "test_cap_exact"})
+    assert user["wallet"]["pro_messages_balance"] == 4, (
+        f"Expected 4 (only initial charge), got {user['wallet']['pro_messages_balance']}"
+    )
+    tx = sync_db["credit_transactions"].find_one({"_id": ctx.tx_id})
+    assert tx["counted_as_messages"] == 1
+    assert tx.get("extra_charge_outstanding") is not True

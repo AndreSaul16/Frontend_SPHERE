@@ -1,24 +1,71 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# ===========================
+# SPHERE — .gitignore
+# ===========================
 
-node_modules
-dist
-dist-ssr
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.env.bak
+*.env.7z
+*firebase-adminsdk*.json
+credentials/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.egg
+
+# --- Virtual Environments ---
+venv/
+env/
+ENV/
+.venv/
+
+# --- Node / Frontend ---
+node_modules/
+dist-ssr/
 *.local
+coverage/
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# --- IDE & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.windsurf/
+.agent/
+
+# --- OS ---
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Temporary files ---
+temp_*
+*.tmp
+*.bak
+test_output.txt
+
+# --- Database ---
+*.db
+*.sqlite
+
+# --- Docker ---
+.dockerignore
+
+# --- Build artifacts ---
+build_log.txt
+status_backend.txt
+status_frontend.txt

@@ -108,7 +108,7 @@ Ejemplos:
     
     # Conectar a MongoDB antes de iniciar
     try:
-        from app.core.database import db
+        from app.infrastructure.database import db
         print("📡 Conectando a MongoDB...")
         db.connect()
         print("✅ Conexión establecida\n")
@@ -129,7 +129,7 @@ Ejemplos:
     except KeyboardInterrupt:
         print("\n\n👋 Servidor detenido por el usuario")
     finally:
-        from app.core.database import db
+        from app.infrastructure.database import db
         db.close()
 
 

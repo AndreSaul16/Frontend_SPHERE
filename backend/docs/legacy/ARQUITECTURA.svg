@@ -1,0 +1,860 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1460" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <!-- Paleta Midnight Protocol -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b0f1a"/>
+      <stop offset="100%" stop-color="#050811"/>
+    </linearGradient>
+    <radialGradient id="aurora1" cx="15%" cy="15%" r="40%">
+      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="aurora2" cx="85%" cy="85%" r="40%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Marcadores de flecha -->
+    <marker id="arrowCyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#a855f7"/>
+    </marker>
+    <marker id="arrowEmerald" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#10b981"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#f59e0b"/>
+    </marker>
+    <marker id="arrowRose" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#f43f5e"/>
+    </marker>
+
+    <!-- Iconos reutilizables -->
+    <symbol id="icon-user" viewBox="0 0 24 24">
+      <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <path d="M4 21c0-4 4-7 8-7s8 3 8 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-browser" viewBox="0 0 24 24">
+      <rect x="2.5" y="4" width="19" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <line x1="2.5" y1="9" x2="21.5" y2="9" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="5" cy="6.5" r="0.8" fill="currentColor"/>
+      <circle cx="7.5" cy="6.5" r="0.8" fill="currentColor"/>
+      <circle cx="10" cy="6.5" r="0.8" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-react" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="2" fill="currentColor"/>
+      <ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.2" transform="rotate(60 12 12)"/>
+      <ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="currentColor" stroke-width="1.2" transform="rotate(-60 12 12)"/>
+    </symbol>
+    <symbol id="icon-firebase" viewBox="0 0 24 24">
+      <path d="M5 18 L9 3 L12 9 L14 5 L19 18 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M5 18 L19 18 L12 22 Z" fill="currentColor" fill-opacity="0.4" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-lightning" viewBox="0 0 24 24">
+      <path d="M13 2 L4 14 L11 14 L9 22 L20 10 L13 10 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-mongo" viewBox="0 0 24 24">
+      <path d="M12 2 C8 8 8 14 12 22 C16 14 16 8 12 2 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M12 2 L12 22" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
+    <symbol id="icon-redis" viewBox="0 0 24 24">
+      <path d="M12 3 L21 7 L12 11 L3 7 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M3 12 L12 16 L21 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M3 17 L12 21 L21 17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-openai" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="8" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="16" cy="9" r="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="8" cy="15" r="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <circle cx="16" cy="15" r="3" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    </symbol>
+    <symbol id="icon-brain" viewBox="0 0 24 24">
+      <path d="M9 3 C6 3 4 5 4 8 C4 9 3 10 3 12 C3 14 4 15 4 16 C4 19 6 21 9 21 L9 3 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M15 3 C18 3 20 5 20 8 C20 9 21 10 21 12 C21 14 20 15 20 16 C20 19 18 21 15 21 L15 3 Z" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M9 7 L15 7 M9 12 L15 12 M9 17 L15 17" stroke="currentColor" stroke-width="1.2"/>
+    </symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24">
+      <path d="M12 2 L4 6 L4 12 C4 17 7 20 12 22 C17 20 20 17 20 12 L20 6 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M9 12 L11 14 L15 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24">
+      <rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 11 L8 7 C8 4.8 9.8 3 12 3 C14.2 3 16 4.8 16 7 L16 11" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
+    <symbol id="icon-key" viewBox="0 0 24 24">
+      <circle cx="7" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M10 12 L21 1 L19 3 L21 5 L18 8 L20 10 L17 13 L15 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-gear" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M12 2 L12 5 M12 19 L12 22 M2 12 L5 12 M19 12 L22 12 M4.9 4.9 L7 7 M17 17 L19.1 19.1 M4.9 19.1 L7 17 M17 7 L19.1 4.9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-bot" viewBox="0 0 24 24">
+      <rect x="4" y="8" width="16" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="9" cy="13" r="1.3" fill="currentColor"/>
+      <circle cx="15" cy="13" r="1.3" fill="currentColor"/>
+      <line x1="12" y1="4" x2="12" y2="8" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="12" cy="3.5" r="1" fill="currentColor"/>
+      <path d="M9 17 L15 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24">
+      <circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M2 20 C2 16 5 14 9 14 C13 14 16 16 16 20" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="17" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M17 13.5 C20 13.5 22 15.5 22 19" fill="none" stroke="currentColor" stroke-width="1.3"/>
+    </symbol>
+    <symbol id="icon-graph" viewBox="0 0 24 24">
+      <circle cx="5" cy="6" r="2" fill="currentColor"/>
+      <circle cx="19" cy="6" r="2" fill="currentColor"/>
+      <circle cx="12" cy="13" r="2" fill="currentColor"/>
+      <circle cx="5" cy="19" r="2" fill="currentColor"/>
+      <circle cx="19" cy="19" r="2" fill="currentColor"/>
+      <path d="M6.5 7 L10.5 12 M17.5 7 L13.5 12 M10.5 14 L6.5 17.5 M13.5 14 L17.5 17.5" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="icon-github" viewBox="0 0 24 24">
+      <path d="M12 2 C6.5 2 2 6.5 2 12 C2 16.4 4.9 20.1 8.9 21.4 C9.4 21.5 9.6 21.2 9.6 20.9 C9.6 20.6 9.6 19.9 9.6 18.9 C6.7 19.6 6.1 17.6 6.1 17.6 C5.6 16.5 5 16.2 5 16.2 C4.1 15.6 5.1 15.6 5.1 15.6 C6.1 15.7 6.6 16.6 6.6 16.6 C7.5 18.2 9 17.7 9.6 17.5 C9.7 16.8 10 16.3 10.3 16 C8 15.8 5.5 14.9 5.5 10.8 C5.5 9.7 5.9 8.7 6.6 8 C6.5 7.7 6.1 6.6 6.7 5.1 C6.7 5.1 7.6 4.8 9.6 6.2 C10.5 6 11.5 5.9 12.5 5.9 C13.5 5.9 14.5 6 15.4 6.2 C17.4 4.8 18.3 5.1 18.3 5.1 C18.9 6.6 18.5 7.7 18.4 8 C19.1 8.7 19.5 9.7 19.5 10.8 C19.5 14.9 17 15.8 14.7 16 C15.1 16.4 15.5 17.1 15.5 18.2 C15.5 19.8 15.5 20.5 15.5 20.9 C15.5 21.2 15.7 21.5 16.2 21.4 C20.1 20.1 23 16.4 23 12 C22 6.5 17.5 2 12 2 Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-notion" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 17 L8 7 L16 17 L16 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="icon-slack" viewBox="0 0 24 24">
+      <rect x="5" y="10" width="6" height="2" rx="1" fill="currentColor"/>
+      <rect x="13" y="12" width="6" height="2" rx="1" fill="currentColor"/>
+      <rect x="10" y="5" width="2" height="6" rx="1" fill="currentColor"/>
+      <rect x="12" y="13" width="2" height="6" rx="1" fill="currentColor"/>
+      <circle cx="4" cy="11" r="1.2" fill="currentColor"/>
+      <circle cx="20" cy="13" r="1.2" fill="currentColor"/>
+      <circle cx="11" cy="4" r="1.2" fill="currentColor"/>
+      <circle cx="13" cy="20" r="1.2" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-n8n" viewBox="0 0 24 24">
+      <circle cx="4" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="12" cy="6" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="12" cy="18" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="20" cy="12" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M6 12 L10 7 M6 12 L10 17 M14 7 L18 12 M14 17 L18 12" stroke="currentColor" stroke-width="1.4"/>
+    </symbol>
+    <symbol id="icon-contact" viewBox="0 0 24 24">
+      <rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <circle cx="12" cy="10" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M7 17 C7 14.5 9.2 13 12 13 C14.8 13 17 14.5 17 17" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
+    <symbol id="icon-dollar" viewBox="0 0 24 24">
+      <path d="M12 3 L12 21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M16 7 C16 5.5 14.5 4.5 12 4.5 C9.5 4.5 8 5.5 8 7 C8 10 16 10 16 14 C16 16 14.5 17.5 12 17.5 C9.5 17.5 8 16.5 8 15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="icon-fuse" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M7 12 L10 15 L17 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+    </symbol>
+    <symbol id="icon-database" viewBox="0 0 24 24">
+      <ellipse cx="12" cy="5" rx="8" ry="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 5 L4 19 C4 20.4 7.6 21.5 12 21.5 C16.4 21.5 20 20.4 20 19 L20 5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M4 12 C4 13.4 7.6 14.5 12 14.5 C16.4 14.5 20 13.4 20 12" fill="none" stroke="currentColor" stroke-width="1.5"/>
+    </symbol>
+    <symbol id="icon-docs" viewBox="0 0 24 24">
+      <path d="M6 3 L14 3 L19 8 L19 21 L6 21 Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <path d="M14 3 L14 8 L19 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <line x1="9" y1="12" x2="16" y2="12" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="9" y1="15" x2="16" y2="15" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="9" y1="18" x2="13" y2="18" stroke="currentColor" stroke-width="1.3"/>
+    </symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24">
+      <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/>
+      <line x1="15" y1="15" x2="21" y2="21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+    </symbol>
+
+    <!-- Estilos de tarjeta -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="1800" height="1460" fill="url(#bgGrad)"/>
+  <rect width="1800" height="1460" fill="url(#aurora1)"/>
+  <rect width="1800" height="1460" fill="url(#aurora2)"/>
+
+  <!-- Grid sutil -->
+  <g stroke="#1e293b" stroke-width="0.5" opacity="0.25">
+    <path d="M0 100 L1800 100 M0 200 L1800 200 M0 300 L1800 300 M0 400 L1800 400 M0 500 L1800 500 M0 600 L1800 600 M0 700 L1800 700 M0 800 L1800 800 M0 900 L1800 900 M0 1000 L1800 1000 M0 1100 L1800 1100 M0 1200 L1800 1200 M0 1300 L1800 1300 M0 1400 L1800 1400"/>
+  </g>
+
+  <!-- ================= HEADER ================= -->
+  <g transform="translate(40, 40)">
+    <text x="0" y="30" fill="#e2e8f0" font-size="32" font-weight="700" letter-spacing="2">SPHERE — ARQUITECTURA MULTI-TENANT</text>
+    <text x="0" y="55" fill="#64748b" font-size="14" font-family="monospace" letter-spacing="1">v3.0 · 19 de Abril, 2026 · Production-Grade</text>
+
+    <!-- Leyenda de flujos -->
+    <g transform="translate(1100, 0)">
+      <rect x="0" y="0" width="660" height="60" rx="10" fill="#0f172a" fill-opacity="0.7" stroke="#1e293b" stroke-width="1"/>
+      <text x="15" y="20" fill="#94a3b8" font-size="11" font-weight="600" letter-spacing="1">FLUJOS DE DATOS</text>
+      <g font-size="11" fill="#cbd5e1">
+        <line x1="15" y1="38" x2="45" y2="38" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrowCyan)"/>
+        <text x="52" y="42">HTTP / API</text>
+
+        <line x1="145" y1="38" x2="175" y2="38" stroke="#a855f7" stroke-width="2" marker-end="url(#arrowPurple)"/>
+        <text x="182" y="42">Auth / JWT</text>
+
+        <line x1="280" y1="38" x2="310" y2="38" stroke="#10b981" stroke-width="2" marker-end="url(#arrowEmerald)"/>
+        <text x="317" y="42">Datos</text>
+
+        <line x1="385" y1="38" x2="415" y2="38" stroke="#f59e0b" stroke-width="2" marker-end="url(#arrowAmber)"/>
+        <text x="422" y="42">OAuth / Webhook</text>
+
+        <line x1="555" y1="38" x2="585" y2="38" stroke="#f43f5e" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#arrowRose)"/>
+        <text x="592" y="42">Async / Stream</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= CAPA 1: USUARIO + BROWSER ================= -->
+  <g transform="translate(40, 120)">
+    <text x="0" y="0" fill="#64748b" font-size="10" font-weight="700" letter-spacing="2">CAPA CLIENTE</text>
+
+    <g transform="translate(60, 20)">
+      <rect x="0" y="0" width="220" height="90" rx="14" fill="#0f172a" fill-opacity="0.8" stroke="#334155" stroke-width="1.5"/>
+      <use href="#icon-user" x="20" y="25" width="40" height="40" color="#e2e8f0"/>
+      <text x="80" y="40" fill="#e2e8f0" font-size="16" font-weight="600">Usuario</text>
+      <text x="80" y="58" fill="#64748b" font-size="11" font-family="monospace">multi-tenant · per-user scope</text>
+      <text x="80" y="72" fill="#64748b" font-size="11" font-family="monospace">firebase_uid = PK</text>
+    </g>
+
+    <g transform="translate(340, 20)">
+      <rect x="0" y="0" width="260" height="90" rx="14" fill="#0f172a" fill-opacity="0.8" stroke="#334155" stroke-width="1.5"/>
+      <use href="#icon-browser" x="20" y="25" width="40" height="40" color="#e2e8f0"/>
+      <text x="80" y="40" fill="#e2e8f0" font-size="16" font-weight="600">Browser</text>
+      <text x="80" y="58" fill="#64748b" font-size="11" font-family="monospace">localhost:3000</text>
+      <text x="80" y="72" fill="#64748b" font-size="11" font-family="monospace">Vite · HMR · HTTPS prod</text>
+    </g>
+  </g>
+
+  <!-- ================= CAPA 2: FRONTEND ================= -->
+  <g transform="translate(40, 250)">
+    <text x="0" y="0" fill="#22d3ee" font-size="10" font-weight="700" letter-spacing="2">FRONTEND · REACT + VITE + TYPESCRIPT</text>
+    <rect x="0" y="12" width="1720" height="230" rx="18" fill="#0c1729" fill-opacity="0.55" stroke="#22d3ee" stroke-opacity="0.3" stroke-width="1.5"/>
+
+    <!-- Auth Context -->
+    <g transform="translate(30, 40)">
+      <rect x="0" y="0" width="260" height="190" rx="12" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-firebase" x="18" y="15" width="24" height="24" color="#f59e0b"/>
+      <text x="50" y="32" fill="#e2e8f0" font-size="14" font-weight="600">AuthContext</text>
+      <text x="15" y="60" fill="#64748b" font-size="10" font-family="monospace">onIdTokenChanged listener</text>
+      <text x="15" y="78" fill="#64748b" font-size="10" font-family="monospace">refresh cada 55 min</text>
+      <g font-size="11" fill="#cbd5e1">
+        <text x="15" y="105">▸ signInWithEmail</text>
+        <text x="15" y="125">▸ signInWithGoogle</text>
+        <text x="15" y="145">▸ signInWithGithub</text>
+        <text x="15" y="165">▸ signOut</text>
+      </g>
+      <rect x="15" y="175" width="60" height="14" rx="7" fill="#22d3ee" fill-opacity="0.15"/>
+      <text x="45" y="184" text-anchor="middle" font-size="9" fill="#22d3ee" font-family="monospace">LoginPage</text>
+    </g>
+
+    <!-- Pages -->
+    <g transform="translate(310, 40)">
+      <rect x="0" y="0" width="280" height="190" rx="12" fill="#0f172a" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-docs" x="18" y="15" width="24" height="24" color="#a855f7"/>
+      <text x="50" y="32" fill="#e2e8f0" font-size="14" font-weight="600">Pages</text>
+      <g font-size="11" fill="#cbd5e1">
+        <text x="15" y="60">▸ SettingsPage <tspan fill="#64748b" font-size="9">(shell)</tspan></text>
+        <text x="15" y="78" fill="#94a3b8" font-size="10">  → Profile · Integrations · Contacts</text>
+        <text x="15" y="95" fill="#94a3b8" font-size="10">  → AgentOverrides · Storage</text>
+        <text x="15" y="118">▸ ChatPanel + Sessions</text>
+        <text x="15" y="138">▸ AgentDetailPage</text>
+        <text x="15" y="158">▸ LoginPage · ProfilePage</text>
+      </g>
+      <rect x="15" y="170" width="250" height="15" rx="4" fill="#a855f7" fill-opacity="0.12"/>
+      <text x="22" y="181" font-size="9" fill="#a855f7" font-family="monospace">&lt;RequireAuth&gt; wrapper en todas</text>
+    </g>
+
+    <!-- Componentes nuevos -->
+    <g transform="translate(610, 40)">
+      <rect x="0" y="0" width="280" height="190" rx="12" fill="#0f172a" stroke="#10b981" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-gear" x="18" y="15" width="24" height="24" color="#10b981"/>
+      <text x="50" y="32" fill="#e2e8f0" font-size="14" font-weight="600">Componentes</text>
+      <g font-size="11" fill="#cbd5e1">
+        <text x="15" y="60">▸ RequireAuth</text>
+        <text x="15" y="80">▸ TokenUsageBar</text>
+        <text x="15" y="100" fill="#64748b" font-size="10">  auto-refresh 60s · budget diario</text>
+        <text x="15" y="120">▸ ToolConfirmationModal</text>
+        <text x="15" y="140" fill="#64748b" font-size="10">  confirmar acciones destructivas</text>
+        <text x="15" y="160">▸ ArtifactPanel · MessageBubble</text>
+        <text x="15" y="178">▸ Sidebar · AgentSelectorModal</text>
+      </g>
+    </g>
+
+    <!-- State + API Service -->
+    <g transform="translate(910, 40)">
+      <rect x="0" y="0" width="280" height="190" rx="12" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-graph" x="18" y="15" width="24" height="24" color="#22d3ee"/>
+      <text x="50" y="32" fill="#e2e8f0" font-size="14" font-weight="600">Store · Zustand</text>
+      <g font-size="11" fill="#cbd5e1">
+        <text x="15" y="60">▸ useChatStore</text>
+        <text x="15" y="80" fill="#64748b" font-size="10">  messagesBySession · sessionsByAgent</text>
+        <text x="15" y="100">▸ useUserAvatar</text>
+        <text x="15" y="128" fill="#22d3ee" font-size="12" font-weight="600">services/api.ts</text>
+        <text x="15" y="148" fill="#64748b" font-size="10">  authHeaders() · Bearer inyectado</text>
+        <text x="15" y="168" fill="#64748b" font-size="10">  streamChat · chatService</text>
+      </g>
+    </g>
+
+    <!-- Services tipados -->
+    <g transform="translate(1210, 40)">
+      <rect x="0" y="0" width="480" height="190" rx="12" fill="#0f172a" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-key" x="18" y="15" width="24" height="24" color="#f59e0b"/>
+      <text x="50" y="32" fill="#e2e8f0" font-size="14" font-weight="600">API Services (tipados)</text>
+      <g font-size="11" fill="#cbd5e1">
+        <text x="15" y="60">▸ profileService        <tspan fill="#64748b" font-size="10">GET/PATCH /me · /me/usage</tspan></text>
+        <text x="15" y="82">▸ integrationsService   <tspan fill="#64748b" font-size="10">connect/disconnect OAuth</tspan></text>
+        <text x="15" y="104">▸ contactsService       <tspan fill="#64748b" font-size="10">list/add/remove whitelist</tspan></text>
+        <text x="15" y="126">▸ agentOverridesService <tspan fill="#64748b" font-size="10">upsert overlay prompts</tspan></text>
+        <text x="15" y="148">▸ chatService           <tspan fill="#64748b" font-size="10">sendMessage · streamChat SSE</tspan></text>
+        <text x="15" y="170" fill="#94a3b8" font-size="10" font-style="italic">Interfaces: UserProfile · Integration · Contact · AgentOverride</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= FLECHA FRONTEND -> BACKEND ================= -->
+  <g>
+    <line x1="900" y1="490" x2="900" y2="540" stroke="#22d3ee" stroke-width="3" marker-end="url(#arrowCyan)"/>
+    <text x="915" y="520" fill="#22d3ee" font-size="12" font-family="monospace" font-weight="600">HTTPS + Bearer &lt;id_token&gt;</text>
+  </g>
+
+  <!-- ================= CAPA 3: API GATEWAY ================= -->
+  <g transform="translate(40, 550)">
+    <text x="0" y="0" fill="#a855f7" font-size="10" font-weight="700" letter-spacing="2">API GATEWAY · FASTAPI · main.py</text>
+    <rect x="0" y="12" width="1720" height="130" rx="18" fill="#1a0f29" fill-opacity="0.55" stroke="#a855f7" stroke-opacity="0.3" stroke-width="1.5"/>
+
+    <g transform="translate(30, 30)">
+      <rect x="0" y="0" width="240" height="100" rx="10" fill="#0f172a" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-lightning" x="15" y="15" width="24" height="24" color="#a855f7"/>
+      <text x="48" y="32" fill="#e2e8f0" font-size="13" font-weight="600">FastAPI App</text>
+      <text x="15" y="60" fill="#cbd5e1" font-size="10" font-family="monospace">lifespan:</text>
+      <text x="15" y="74" fill="#64748b" font-size="10" font-family="monospace">  validate_env (fail-fast)</text>
+      <text x="15" y="86" fill="#64748b" font-size="10" font-family="monospace">  init_firebase · ensure_indexes</text>
+    </g>
+
+    <g transform="translate(290, 30)">
+      <rect x="0" y="0" width="220" height="100" rx="10" fill="#0f172a" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-shield" x="15" y="15" width="24" height="24" color="#10b981"/>
+      <text x="48" y="32" fill="#e2e8f0" font-size="13" font-weight="600">CORS + Security</text>
+      <text x="15" y="60" fill="#64748b" font-size="10" font-family="monospace">allow_methods explícitos</text>
+      <text x="15" y="74" fill="#64748b" font-size="10" font-family="monospace">X-Content-Type-Options</text>
+      <text x="15" y="86" fill="#64748b" font-size="10" font-family="monospace">X-Frame · Referrer-Policy</text>
+    </g>
+
+    <g transform="translate(530, 30)">
+      <rect x="0" y="0" width="220" height="100" rx="10" fill="#0f172a" stroke="#f43f5e" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-gear" x="15" y="15" width="24" height="24" color="#f43f5e"/>
+      <text x="48" y="32" fill="#e2e8f0" font-size="13" font-weight="600">Rate Limiter</text>
+      <text x="15" y="60" fill="#64748b" font-size="10" font-family="monospace">fastapi-limiter + Redis</text>
+      <text x="15" y="74" fill="#64748b" font-size="10" font-family="monospace">10/min chat · 30/min resto</text>
+      <text x="15" y="86" fill="#64748b" font-size="10" font-family="monospace">identifier = hash(Bearer)</text>
+    </g>
+
+    <g transform="translate(770, 30)">
+      <rect x="0" y="0" width="220" height="100" rx="10" fill="#0f172a" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-shield" x="15" y="15" width="24" height="24" color="#a855f7"/>
+      <text x="48" y="32" fill="#e2e8f0" font-size="13" font-weight="600">get_current_user</text>
+      <text x="15" y="60" fill="#64748b" font-size="10" font-family="monospace">verify_id_token (Firebase)</text>
+      <text x="15" y="74" fill="#64748b" font-size="10" font-family="monospace">auto_provision User</text>
+      <text x="15" y="86" fill="#64748b" font-size="10" font-family="monospace">503 prod sin credentials</text>
+    </g>
+
+    <g transform="translate(1010, 30)">
+      <rect x="0" y="0" width="680" height="100" rx="10" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-docs" x="15" y="15" width="24" height="24" color="#22d3ee"/>
+      <text x="48" y="32" fill="#e2e8f0" font-size="13" font-weight="600">Routers v1</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="56">/auth (me, overrides, contacts)</text>
+        <text x="195" y="56">/sessions</text>
+        <text x="305" y="56">/agents</text>
+        <text x="400" y="56">/chat</text>
+        <text x="475" y="56">/stream (SSE)</text>
+        <text x="15" y="76">/documents (GridFS)</text>
+        <text x="195" y="76">/integrations/*/connect · callback</text>
+        <text x="475" y="76">/health/live</text>
+        <text x="580" y="76">/health/ready</text>
+      </g>
+      <rect x="15" y="82" width="655" height="10" rx="3" fill="#22d3ee" fill-opacity="0.08"/>
+    </g>
+  </g>
+
+  <!-- Flecha gateway -> core -->
+  <line x1="900" y1="685" x2="900" y2="725" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrowCyan)"/>
+
+  <!-- ================= CAPA 4: BACKEND CORE SERVICES ================= -->
+  <g transform="translate(40, 740)">
+    <text x="0" y="0" fill="#10b981" font-size="10" font-weight="700" letter-spacing="2">CAPA CORE · app/core/ + app/tools/ + app/api/</text>
+    <rect x="0" y="12" width="1720" height="360" rx="18" fill="#0a1f18" fill-opacity="0.4" stroke="#10b981" stroke-opacity="0.3" stroke-width="1.5"/>
+
+    <!-- Row 1 -->
+    <!-- tenant -->
+    <g transform="translate(20, 35)">
+      <rect x="0" y="0" width="200" height="150" rx="10" fill="#0f172a" stroke="#10b981" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-shield" x="15" y="12" width="22" height="22" color="#10b981"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">tenant.py</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Row-level scoping</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">scoped_find()</text>
+        <text x="15" y="90">scoped_insert()</text>
+        <text x="15" y="106">scoped_update()</text>
+        <text x="15" y="122">scoped_delete()</text>
+        <text x="15" y="138">require_owner()</text>
+      </g>
+    </g>
+
+    <!-- auth -->
+    <g transform="translate(240, 35)">
+      <rect x="0" y="0" width="200" height="150" rx="10" fill="#0f172a" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-firebase" x="15" y="12" width="22" height="22" color="#a855f7"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">auth.py</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Firebase Admin SDK</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">init_firebase()</text>
+        <text x="15" y="90">verify_id_token()</text>
+        <text x="15" y="106">auto_provision_user()</text>
+        <text x="15" y="122">get_current_user</text>
+        <text x="15" y="138" fill="#64748b">+ dev-token (dev only)</text>
+      </g>
+    </g>
+
+    <!-- credentials -->
+    <g transform="translate(460, 35)">
+      <rect x="0" y="0" width="200" height="150" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-key" x="15" y="12" width="22" height="22" color="#f59e0b"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">credentials.py</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Fernet en reposo</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">store_token()</text>
+        <text x="15" y="90">get_token()</text>
+        <text x="15" y="106">refresh()</text>
+        <text x="15" y="122">revoke()</text>
+        <text x="15" y="138">list_connected()</text>
+      </g>
+    </g>
+
+    <!-- agent_resolver -->
+    <g transform="translate(680, 35)">
+      <rect x="0" y="0" width="200" height="150" rx="10" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-brain" x="15" y="12" width="22" height="22" color="#22d3ee"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">agent_resolver.py</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Overlay pattern</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">resolve_agent_config()</text>
+        <text x="15" y="92" fill="#64748b">base + override + ctx</text>
+      </g>
+      <line x1="15" y1="100" x2="185" y2="100" stroke="#1e293b"/>
+      <text x="15" y="116" fill="#22d3ee" font-size="10" font-family="monospace">user_context.py</text>
+      <text x="15" y="130" fill="#64748b" font-size="9" font-family="monospace">build_user_context_block()</text>
+      <text x="15" y="144" fill="#64748b" font-size="9" font-family="monospace">→ USER_CONTEXT block</text>
+    </g>
+
+    <!-- orchestrator -->
+    <g transform="translate(900, 35)">
+      <rect x="0" y="0" width="260" height="150" rx="10" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.7" stroke-width="2" filter="url(#glow)"/>
+      <use href="#icon-graph" x="15" y="12" width="22" height="22" color="#22d3ee"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="700">orchestrator.py</text>
+      <text x="15" y="50" fill="#94a3b8" font-size="9" font-style="italic">LangGraph StateGraph</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="70">router_node → expert_agent</text>
+        <text x="15" y="86">   ↓ should_use_tools?</text>
+        <text x="15" y="102">tool_node ↺ expert_agent</text>
+      </g>
+      <line x1="15" y1="110" x2="245" y2="110" stroke="#1e293b"/>
+      <g font-size="9" font-family="monospace" fill="#22d3ee">
+        <text x="15" y="124">AgentState { user_id, target_role,</text>
+        <text x="15" y="136">  tool_calls_remaining, messages }</text>
+      </g>
+      <rect x="15" y="140" width="230" height="8" rx="2" fill="#22d3ee" fill-opacity="0.15"/>
+    </g>
+
+    <!-- token_budget -->
+    <g transform="translate(1180, 35)">
+      <rect x="0" y="0" width="180" height="150" rx="10" fill="#0f172a" stroke="#f43f5e" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-dollar" x="15" y="12" width="22" height="22" color="#f43f5e"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">token_budget.py</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Budget diario</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">check_available()</text>
+        <text x="15" y="90">consume()</text>
+        <text x="15" y="108" fill="#64748b">$inc atómico</text>
+        <text x="15" y="124" fill="#64748b">reset 00:00 UTC</text>
+      </g>
+    </g>
+
+    <!-- contacts_service -->
+    <g transform="translate(1380, 35)">
+      <rect x="0" y="0" width="180" height="150" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-contact" x="15" y="12" width="22" height="22" color="#f59e0b"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">contacts_service</text>
+      <text x="15" y="52" fill="#94a3b8" font-size="9" font-style="italic">Whitelist</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="74">is_authorized()</text>
+        <text x="15" y="90">add_contact()</text>
+        <text x="15" y="106">remove_contact()</text>
+        <text x="15" y="122">normalize (E.164)</text>
+      </g>
+    </g>
+
+    <!-- tool_context -->
+    <g transform="translate(1580, 35)">
+      <rect x="0" y="0" width="130" height="150" rx="10" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-fuse" x="15" y="12" width="22" height="22" color="#22d3ee"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="12" font-weight="600">tool_ctx</text>
+      <text x="15" y="50" fill="#94a3b8" font-size="9" font-style="italic">ContextVar</text>
+      <g font-size="9" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="70">current_user_id</text>
+        <text x="15" y="85">confirmation_lv</text>
+        <text x="15" y="105" fill="#64748b">DESTRUCTIVE_</text>
+        <text x="15" y="117" fill="#64748b">TOOLS</text>
+        <text x="15" y="135" fill="#64748b">requires_conf()</text>
+      </g>
+    </g>
+
+    <!-- Row 2 -->
+    <!-- RAG -->
+    <g transform="translate(20, 200)">
+      <rect x="0" y="0" width="240" height="150" rx="10" fill="#0f172a" stroke="#10b981" stroke-opacity="0.7" stroke-width="2"/>
+      <use href="#icon-search" x="15" y="12" width="22" height="22" color="#10b981"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">rag.py</text>
+      <text x="15" y="50" fill="#10b981" font-size="9" font-weight="600">✓ MULTI-TENANT FIX</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="72">retrieve_context(</text>
+        <text x="15" y="86">  query, role, user_id)</text>
+      </g>
+      <line x1="15" y1="94" x2="225" y2="94" stroke="#1e293b"/>
+      <text x="15" y="110" fill="#94a3b8" font-size="9" font-style="italic">$vectorSearch filter:</text>
+      <text x="15" y="124" fill="#10b981" font-size="9" font-family="monospace">{$and: [{user_id}, {agent_target}]}</text>
+      <text x="15" y="140" fill="#64748b" font-size="9" font-family="monospace">+ embedding_cache (Redis)</text>
+    </g>
+
+    <!-- resilience row -->
+    <g transform="translate(280, 200)">
+      <rect x="0" y="0" width="210" height="150" rx="10" fill="#0f172a" stroke="#f43f5e" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-shield" x="15" y="12" width="22" height="22" color="#f43f5e"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">Resilience</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="55">distributed_lock.py</text>
+        <text x="15" y="70" fill="#64748b" font-size="9">  Redis SET NX EX</text>
+        <text x="15" y="90">circuit_breaker.py</text>
+        <text x="15" y="105" fill="#64748b" font-size="9">  closed/open/half_open</text>
+        <text x="15" y="125">embedding_cache.py</text>
+        <text x="15" y="140" fill="#64748b" font-size="9">  Redis TTL 24h</text>
+      </g>
+    </g>
+
+    <!-- tools -->
+    <g transform="translate(510, 200)">
+      <rect x="0" y="0" width="370" height="150" rx="10" fill="#0f172a" stroke="#22d3ee" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-bot" x="15" y="12" width="22" height="22" color="#22d3ee"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">app/tools/  · Tool Registry (ReAct loop)</text>
+      <g transform="translate(15, 45)">
+        <rect x="0" y="0" width="80" height="90" rx="6" fill="#1e293b"/>
+        <text x="40" y="15" text-anchor="middle" fill="#f59e0b" font-size="10" font-weight="600">CEO</text>
+        <g font-size="8" fill="#94a3b8" font-family="monospace">
+          <text x="5" y="30">delegate_task</text>
+          <text x="5" y="42">check_task</text>
+          <text x="5" y="54">list_active</text>
+        </g>
+      </g>
+      <g transform="translate(100, 45)">
+        <rect x="0" y="0" width="80" height="90" rx="6" fill="#1e293b"/>
+        <text x="40" y="15" text-anchor="middle" fill="#22d3ee" font-size="10" font-weight="600">CTO</text>
+        <g font-size="8" fill="#94a3b8" font-family="monospace">
+          <text x="5" y="30">jules_task</text>
+          <text x="5" y="42">jules_status</text>
+          <text x="5" y="54">jules_review</text>
+          <text x="5" y="70" fill="#10b981">github_client</text>
+          <text x="5" y="82" fill="#10b981">notion_client</text>
+        </g>
+      </g>
+      <g transform="translate(185, 45)">
+        <rect x="0" y="0" width="80" height="90" rx="6" fill="#1e293b"/>
+        <text x="40" y="15" text-anchor="middle" fill="#ec4899" font-size="10" font-weight="600">CMO</text>
+        <g font-size="8" fill="#94a3b8" font-family="monospace">
+          <text x="5" y="30">linkedin 🔒</text>
+          <text x="5" y="42">instagram 🔒</text>
+          <text x="5" y="54">analytics</text>
+          <text x="5" y="66">schedule 🔒</text>
+          <text x="5" y="82" fill="#f59e0b">+ confirm</text>
+        </g>
+      </g>
+      <g transform="translate(270, 45)">
+        <rect x="0" y="0" width="85" height="90" rx="6" fill="#1e293b"/>
+        <text x="42" y="15" text-anchor="middle" fill="#10b981" font-size="10" font-weight="600">CFO</text>
+        <g font-size="8" fill="#94a3b8" font-family="monospace">
+          <text x="5" y="30">financial_news</text>
+          <text x="5" y="42">stock_data</text>
+          <text x="5" y="54">market_analysis</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- shared tools -->
+    <g transform="translate(900, 200)">
+      <rect x="0" y="0" width="260" height="150" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-users" x="15" y="12" width="22" height="22" color="#f59e0b"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">shared_tools.py</text>
+      <text x="15" y="50" fill="#94a3b8" font-size="9" font-style="italic">Validan contra contacts whitelist:</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="72">calendar_list_events</text>
+        <text x="15" y="88">calendar_create_event <tspan fill="#f43f5e">🔒</tspan></text>
+        <text x="15" y="104">whatsapp_send_message <tspan fill="#f43f5e">🔒</tspan></text>
+        <text x="15" y="120">whatsapp_send_notification <tspan fill="#f43f5e">🔒</tspan></text>
+        <text x="15" y="136">whatsapp_read_messages</text>
+      </g>
+    </g>
+
+    <!-- n8n client -->
+    <g transform="translate(1180, 200)">
+      <rect x="0" y="0" width="220" height="150" rx="10" fill="#0f172a" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-n8n" x="15" y="12" width="22" height="22" color="#f59e0b"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">n8n_client.py</text>
+      <text x="15" y="50" fill="#94a3b8" font-size="9" font-style="italic">HMAC + retry + circuit</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="72">call_webhook()</text>
+        <text x="15" y="90" fill="#64748b">tenacity retry 3×</text>
+        <text x="15" y="106" fill="#64748b">exponential 1s/2s/4s</text>
+        <text x="15" y="124" fill="#64748b">X-Webhook-Signature</text>
+        <text x="15" y="140" fill="#64748b">circuit breaker wrap</text>
+      </g>
+    </g>
+
+    <!-- Error + misc -->
+    <g transform="translate(1420, 200)">
+      <rect x="0" y="0" width="290" height="150" rx="10" fill="#0f172a" stroke="#64748b" stroke-opacity="0.5" stroke-width="1.5"/>
+      <use href="#icon-docs" x="15" y="12" width="22" height="22" color="#94a3b8"/>
+      <text x="42" y="28" fill="#e2e8f0" font-size="13" font-weight="600">Utilidades</text>
+      <g font-size="10" font-family="monospace" fill="#cbd5e1">
+        <text x="15" y="52">error_handling.py</text>
+        <text x="15" y="66" fill="#64748b" font-size="9">  safe_error_response()</text>
+        <text x="15" y="86">pagination.py</text>
+        <text x="15" y="100" fill="#64748b" font-size="9">  cursor + limit (max 200)</text>
+        <text x="15" y="120">logger.py</text>
+        <text x="15" y="134" fill="#64748b" font-size="9">  api / db / checkpoint loggers</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Flecha core -> data -->
+  <line x1="500" y1="1115" x2="500" y2="1155" stroke="#10b981" stroke-width="2.5" marker-end="url(#arrowEmerald)"/>
+  <line x1="1400" y1="1115" x2="1400" y2="1155" stroke="#f43f5e" stroke-width="2.5" marker-end="url(#arrowRose)"/>
+
+  <!-- ================= CAPA 5: DATA LAYER ================= -->
+  <g transform="translate(40, 1170)">
+    <text x="0" y="0" fill="#10b981" font-size="10" font-weight="700" letter-spacing="2">CAPA DATOS</text>
+
+    <!-- MongoDB -->
+    <g transform="translate(0, 15)">
+      <rect x="0" y="0" width="1110" height="180" rx="14" fill="#0a1f18" fill-opacity="0.55" stroke="#10b981" stroke-opacity="0.5" stroke-width="1.5"/>
+      <g transform="translate(20, 20)">
+        <use href="#icon-mongo" x="0" y="0" width="30" height="30" color="#10b981"/>
+        <text x="38" y="20" fill="#e2e8f0" font-size="16" font-weight="700">MongoDB Atlas</text>
+        <text x="38" y="36" fill="#64748b" font-size="10" font-family="monospace">sphere_db · motor (async) + pymongo (checkpointer)</text>
+      </g>
+
+      <!-- Collections grid -->
+      <g transform="translate(20, 70)" font-size="10" font-family="monospace">
+        <g>
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">users</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">firebase_uid · usage</text>
+        </g>
+        <g transform="translate(170, 0)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">oauth_credentials</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">(user_id, provider) · cifrado</text>
+        </g>
+        <g transform="translate(340, 0)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">sessions_metadata</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">user_id · created_at</text>
+        </g>
+        <g transform="translate(510, 0)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">checkpoints</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">thread_id = uid:sess</text>
+        </g>
+        <g transform="translate(680, 0)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">custom_agents</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">owner_user_id</text>
+        </g>
+        <g transform="translate(850, 0)">
+          <rect x="0" y="0" width="220" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">agent_files (GridFS)</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">metadata.user_id · content_hash</text>
+        </g>
+
+        <g transform="translate(0, 40)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#043826" stroke="#10b981" stroke-opacity="0.6" stroke-width="1.5"/>
+          <text x="8" y="13" fill="#22c55e" font-size="10" font-weight="600">knowledge_base ★</text>
+          <text x="8" y="25" fill="#22c55e" font-size="8">vector_index · user_id filter</text>
+        </g>
+        <g transform="translate(170, 40)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">contacts</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">(user_id, type, value)</text>
+        </g>
+        <g transform="translate(340, 40)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">user_agent_overrides</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">(user_id, agent_role)</text>
+        </g>
+        <g transform="translate(510, 40)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">idempotency_keys</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">TTL 24h</text>
+        </g>
+        <g transform="translate(680, 40)">
+          <rect x="0" y="0" width="160" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">oauth_states</text>
+          <text x="8" y="25" fill="#94a3b8" font-size="8">CSRF · TTL 10min</text>
+        </g>
+        <g transform="translate(850, 40)">
+          <rect x="0" y="0" width="108" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">ratings</text>
+        </g>
+        <g transform="translate(968, 40)">
+          <rect x="0" y="0" width="102" height="30" rx="5" fill="#052e20" stroke="#10b981" stroke-opacity="0.4"/>
+          <text x="8" y="13" fill="#10b981" font-size="10" font-weight="600">agent_tasks</text>
+        </g>
+
+        <text x="0" y="100" fill="#64748b" font-size="9" font-style="italic">★ Fix histórico 2026-04-19: el $vectorSearch ahora filtra por user_id + agent_target</text>
+      </g>
+    </g>
+
+    <!-- Redis -->
+    <g transform="translate(1130, 15)">
+      <rect x="0" y="0" width="580" height="180" rx="14" fill="#2a0a14" fill-opacity="0.55" stroke="#f43f5e" stroke-opacity="0.5" stroke-width="1.5"/>
+      <g transform="translate(20, 20)">
+        <use href="#icon-redis" x="0" y="0" width="30" height="30" color="#f43f5e"/>
+        <text x="38" y="20" fill="#e2e8f0" font-size="16" font-weight="700">Redis</text>
+        <text x="38" y="36" fill="#64748b" font-size="10" font-family="monospace">redis[hiredis] · async singleton</text>
+      </g>
+
+      <g transform="translate(20, 70)" font-size="10" font-family="monospace">
+        <g>
+          <rect x="0" y="0" width="170" height="50" rx="5" fill="#3d0a18" stroke="#f43f5e" stroke-opacity="0.4"/>
+          <text x="8" y="15" fill="#f43f5e" font-size="10" font-weight="600">Rate Limiter</text>
+          <text x="8" y="28" fill="#94a3b8" font-size="9">fastapi-limiter</text>
+          <text x="8" y="40" fill="#94a3b8" font-size="9">bucket per-user hash</text>
+        </g>
+        <g transform="translate(180, 0)">
+          <rect x="0" y="0" width="170" height="50" rx="5" fill="#3d0a18" stroke="#f43f5e" stroke-opacity="0.4"/>
+          <text x="8" y="15" fill="#f43f5e" font-size="10" font-weight="600">Distributed Lock</text>
+          <text x="8" y="28" fill="#94a3b8" font-size="9">checkpoint:{uid}:{sess}</text>
+          <text x="8" y="40" fill="#94a3b8" font-size="9">SET NX EX 60s</text>
+        </g>
+        <g transform="translate(360, 0)">
+          <rect x="0" y="0" width="170" height="50" rx="5" fill="#3d0a18" stroke="#f43f5e" stroke-opacity="0.4"/>
+          <text x="8" y="15" fill="#f43f5e" font-size="10" font-weight="600">Embedding Cache</text>
+          <text x="8" y="28" fill="#94a3b8" font-size="9">sha256(query + model)</text>
+          <text x="8" y="40" fill="#94a3b8" font-size="9">TTL 24h</text>
+        </g>
+
+        <g transform="translate(0, 65)">
+          <rect x="0" y="0" width="260" height="50" rx="5" fill="#3d0a18" stroke="#f43f5e" stroke-opacity="0.4"/>
+          <text x="8" y="15" fill="#f43f5e" font-size="10" font-weight="600">Circuit Breaker state</text>
+          <text x="8" y="28" fill="#94a3b8" font-size="9">closed / open / half_open</text>
+          <text x="8" y="40" fill="#94a3b8" font-size="9">umbral 5 fallos · open 30s</text>
+        </g>
+        <g transform="translate(270, 65)">
+          <rect x="0" y="0" width="260" height="50" rx="5" fill="#3d0a18" stroke="#f43f5e" stroke-opacity="0.4"/>
+          <text x="8" y="15" fill="#f43f5e" font-size="10" font-weight="600">OAuth state (fallback)</text>
+          <text x="8" y="28" fill="#94a3b8" font-size="9">CSRF nonce HMAC</text>
+          <text x="8" y="40" fill="#94a3b8" font-size="9">también en MongoDB</text>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- ================= CAPA 6: SERVICIOS EXTERNOS ================= -->
+  <g transform="translate(40, 1385)">
+    <text x="0" y="0" fill="#f59e0b" font-size="10" font-weight="700" letter-spacing="2">SERVICIOS EXTERNOS</text>
+
+    <g transform="translate(0, 15)">
+      <g transform="translate(0, 0)">
+        <rect x="0" y="0" width="200" height="60" rx="10" fill="#1f1505" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-firebase" x="15" y="18" width="24" height="24" color="#f59e0b"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">Firebase Auth</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">ID tokens · JWT</text>
+        <text x="48" y="52" fill="#64748b" font-size="9" font-family="monospace">email · Google · GitHub</text>
+      </g>
+
+      <g transform="translate(215, 0)">
+        <rect x="0" y="0" width="150" height="60" rx="10" fill="#1f1505" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-github" x="15" y="18" width="24" height="24" color="#e2e8f0"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">GitHub</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">repo · read:user</text>
+      </g>
+
+      <g transform="translate(380, 0)">
+        <rect x="0" y="0" width="150" height="60" rx="10" fill="#1f1505" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-notion" x="15" y="18" width="24" height="24" color="#e2e8f0"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">Notion</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">read · update</text>
+      </g>
+
+      <g transform="translate(545, 0)">
+        <rect x="0" y="0" width="150" height="60" rx="10" fill="#1f1505" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-slack" x="15" y="18" width="24" height="24" color="#f59e0b"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">Slack</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">chat:write · channels</text>
+      </g>
+
+      <g transform="translate(710, 0)">
+        <rect x="0" y="0" width="180" height="60" rx="10" fill="#1f1505" stroke="#f59e0b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-n8n" x="15" y="18" width="24" height="24" color="#f59e0b"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">n8n</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">workflows · webhooks</text>
+        <text x="48" y="52" fill="#64748b" font-size="9" font-family="monospace">Calendar · WhatsApp · Social</text>
+      </g>
+
+      <g transform="translate(905, 0)">
+        <rect x="0" y="0" width="200" height="60" rx="10" fill="#1f1505" stroke="#a855f7" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-brain" x="15" y="18" width="24" height="24" color="#a855f7"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">DeepSeek</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">deepseek-chat</text>
+        <text x="48" y="52" fill="#64748b" font-size="9" font-family="monospace">router + expert agent</text>
+      </g>
+
+      <g transform="translate(1120, 0)">
+        <rect x="0" y="0" width="200" height="60" rx="10" fill="#1f1505" stroke="#10b981" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-openai" x="15" y="18" width="24" height="24" color="#10b981"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">OpenAI</text>
+        <text x="48" y="40" fill="#64748b" font-size="9" font-family="monospace">text-embedding-3-small</text>
+        <text x="48" y="52" fill="#64748b" font-size="9" font-family="monospace">vectorización RAG</text>
+      </g>
+
+      <g transform="translate(1335, 0)">
+        <rect x="0" y="0" width="375" height="60" rx="10" fill="#0b0f1a" stroke="#64748b" stroke-opacity="0.5" stroke-width="1.5"/>
+        <use href="#icon-lock" x="15" y="18" width="24" height="24" color="#94a3b8"/>
+        <text x="48" y="25" fill="#e2e8f0" font-size="13" font-weight="600">Aislamiento multi-tenant end-to-end</text>
+        <text x="48" y="42" fill="#64748b" font-size="9" font-family="monospace">JWT → user_id → row-level scoping → vector filter → Fernet</text>
+        <text x="48" y="54" fill="#64748b" font-size="9" font-family="monospace">rate-limit + budget + whitelist + confirmation gates</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Connectores especiales -->
+  <g stroke-dasharray="5 3" opacity="0.75">
+    <!-- Frontend auth -> Firebase -->
+    <path d="M 170 300 C 170 250, 240 1395, 140 1395" fill="none" stroke="#f59e0b" stroke-width="1.5"/>
+    <!-- Integrations -> OAuth providers -->
+    <path d="M 700 1415 C 700 1500, 1200 680, 850 650" fill="none" stroke="#f59e0b" stroke-width="0.8" opacity="0.4"/>
+  </g>
+</svg>

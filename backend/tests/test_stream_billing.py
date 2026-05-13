@@ -56,6 +56,8 @@ def mock_deps():
     p = patch("app.core.config.settings")
     mock_settings = p.start()
     mock_settings.DB_NAME = "sphere_db"
+    mock_settings.FERNET_KEY = "test-fernet-key-32-bytes-here!!"
+    mock_settings.is_development = True
     patches.append(p)
 
     # Users collection mock — needs to be awaitable
@@ -163,3 +165,89 @@ class TestAgentNodeRefund:
 
         mock_deps.arefund.assert_not_called()
         mock_deps.areserve_and_charge.assert_not_called()
+
+
+# ── Board Meeting already_charged Propagation ──────────────────
+
+
+class TestBoardMeetingAlreadyChargedPropagation:
+    """Verifica que already_charged sobrevive a través de los nodos
+    del board meeting (board_classifier_node y next_iteration_node)."""
+
+    @pytest.mark.asyncio
+    async def test_board_classifier_node_propagates_already_charged(self):
+        """board_classifier_node preserva already_charged=True en su salida."""
+        from app.application.orchestrator import board_classifier_node
+        state = make_state(already_charged=True)
+
+        result = await board_classifier_node(state)
+
+        assert result.get("already_charged") is True, (
+            f"board_classifier_node debe propagar already_charged=True, "
+            f"pero retornó {result.get('already_charged')}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_board_classifier_node_propagates_false(self):
+        """Triangulación: already_charged=False también se preserva."""
+        from app.application.orchestrator import board_classifier_node
+        state = make_state(already_charged=False)
+
+        result = await board_classifier_node(state)
+
+        assert result.get("already_charged") is False, (
+            f"board_classifier_node debe propagar already_charged=False"
+        )
+
+    def test_next_iteration_node_propagates_already_charged(self):
+        """next_iteration_node preserva already_charged=True en su salida."""
+        from app.application.orchestrator import next_iteration_node
+        state = make_state(already_charged=True)
+
+        result = next_iteration_node(state)
+
+        assert result.get("already_charged") is True, (
+            f"next_iteration_node debe propagar already_charged=True, "
+            f"pero retornó {result.get('already_charged')}"
+        )
+
+    def test_next_iteration_node_propagates_false(self):
+        """Triangulación: already_charged=False en next_iteration_node."""
+        from app.application.orchestrator import next_iteration_node
+        state = make_state(already_charged=False)
+
+        result = next_iteration_node(state)
+
+        assert result.get("already_charged") is False, (
+            f"next_iteration_node debe propagar already_charged=False"
+        )
+
+
+# ── End-to-End: Stream POST charges exactly once ──────────────
+
+
+class TestStreamPostChargesExactlyOnce:
+    """Verifica que el endpoint stream POST cobra exactamente 1 vez,
+    y que agent_node no vuelve a cobrar cuando already_charged=True."""
+
+    @pytest.mark.asyncio
+    async def test_stream_post_charges_exactly_once_end_to_end(self, mock_deps):
+        """agent_node con already_charged=True → 0 cargos extras.
+        La carga ya ocurrió en stream.py; agent_node debe respetar la bandera."""
+        from app.application.orchestrator import agent_node
+        state = make_state(already_charged=True)
+
+        await agent_node(state)
+
+        # agent_node NO debe cobrar cuando already_charged=True
+        mock_deps.areserve_and_charge.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_agent_node_without_already_charged_calls_charge_once(self, mock_deps):
+        """Triangulación: already_charged=False → agent_node cobra exactamente 1 vez."""
+        from app.application.orchestrator import agent_node
+        state = make_state(already_charged=False)
+
+        await agent_node(state)
+
+        mock_deps.areserve_and_charge.assert_called_once()

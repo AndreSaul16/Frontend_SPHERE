@@ -1,12 +1,64 @@
+# ===========================
+# SPHERE Backend — .gitignore
+# ===========================
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.env.bak
+*firebase-adminsdk*.json
+credentials/
+
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
 .pytest_cache/
-.venv/
-env/
+*.egg
+
+# --- Virtual Environments ---
 venv/
+env/
 ENV/
-.env
-test_output.txt
-*.log
+.venv/
+
+# --- IDE & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+.windsurf/
+.agent/
+
+# --- OS ---
 .DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Temporary files ---
+temp_*
+*.tmp
+*.bak
+test_output.txt
+
+# --- Database ---
+*.db
+*.sqlite
+
+# --- Docker ---
+.dockerignore
+
+# --- Build artifacts ---
+build_log.txt
+status_backend.txt
+status_frontend.txt

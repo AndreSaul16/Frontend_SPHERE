@@ -61,10 +61,46 @@ export interface ChatSession {
     user_id: string;
     title: string;
     base_agent_id: string;
+    agent_ref_type: string;
     type: SessionType;
     visual_config: VisualConfig;
     context_files: ContextFile[];
     enabled_tools: string[];
     members: string[];
+    folder?: string;
+    tags?: string[];
+    pinned_messages?: string[];
     created_at: string;
+}
+
+// --- Agent Templates ---
+export interface AgentTemplate {
+    template_id: string;
+    name: string;
+    category: string;
+    description: string;
+    icon: string;
+    system_prompt: string;
+    suggested_files: string[];
+    default_temperature: number;
+    default_model: string;
+    tags: string[];
+}
+
+// --- Agent Documents ---
+export interface AgentDocument {
+    file_id: string;
+    filename: string;
+    file_size_bytes: number;
+    content_type: string;
+    processing_status: 'pending' | 'processing' | 'completed' | 'failed';
+    chunks_count: number;
+    uploaded_at: string;
+}
+
+// --- Message Rating ---
+export interface MessageRating {
+    message_id: string;
+    rating: 'up' | 'down';
+    feedback?: string;
 }

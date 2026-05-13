@@ -1,4 +1,5 @@
 // Artifact Renderer - Master Switch Component
+import DOMPurify from 'dompurify';
 import type { Artifact } from '@/types/artifact';
 import { CodeBlock } from './CodeBlock';
 import { MarkdownViewer } from './MarkdownViewer';
@@ -25,7 +26,11 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
                 <div className="flex-1 flex items-center justify-center p-4">
                     <div
                         className="max-w-full max-h-full"
-                        dangerouslySetInnerHTML={{ __html: artifact.content }}
+                        dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(artifact.content, {
+                                USE_PROFILES: { svg: true, svgFilters: true }
+                            })
+                        }}
                     />
                 </div>
             );

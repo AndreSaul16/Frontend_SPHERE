@@ -9,10 +9,13 @@ from datetime import datetime
 class TestCheckpointer:
     """Tests para la persistencia de LangGraph con MongoDB."""
 
-    def test_checkpointer_initialized(self):
-        """Test: Verificar que el checkpointer está inicializado."""
-        from app.core.orchestrator import checkpointer
-        
+    def test_checkpointer_initialized(self, db_instance):
+        """Test: Verificar que el checkpointer se puede crear."""
+        from langgraph.checkpoint.mongodb import MongoDBSaver
+
+        sync_client = db_instance.get_sync_client()
+        checkpointer = MongoDBSaver(sync_client)
+
         assert checkpointer is not None, "Checkpointer no está inicializado"
         print(f"\n✅ Checkpointer tipo: {type(checkpointer).__name__}")
 

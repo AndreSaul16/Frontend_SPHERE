@@ -1,5 +1,7 @@
 import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { RequireAuth } from "@/components/RequireAuth";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ChatPanel } from "@/components/chat/ChatPanel";
@@ -7,65 +9,129 @@ import { ArtifactPanel } from "@/components/artifacts/ArtifactPanel";
 import { AgentSelectorModal } from "@/components/modals/AgentSelectorModal";
 import { ProfilePage } from "@/pages/ProfilePage";
 import { ChatSettingsPage } from "@/pages/ChatSettingsPage";
+import { AgentDetailPage } from "@/pages/AgentDetailPage";
+import { LoginPage } from "@/pages/LoginPage";
+import { SettingsPage } from "@/pages/SettingsPage";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorOverlay } from "@/components/common/ErrorOverlay";
 import { useChatStore } from "@/store/useChatStore";
+import { PaywallModal } from "@/components/modals/PaywallModal";
+import { BillingPage } from "@/pages/BillingPage";
 
-function App() {
+function AuthenticatedApp() {
   const { fetchSessions, fetchCustomAgents } = useChatStore();
+  const { user } = useAuth();
 
   useEffect(() => {
-    // Sincronización inicial con Backend v2.0
-    fetchSessions();
-    fetchCustomAgents();
-  }, [fetchSessions, fetchCustomAgents]);
+    if (user) {
+      fetchSessions();
+      fetchCustomAgents();
+    }
+  }, [user, fetchSessions, fetchCustomAgents]);
 
   return (
-    <div className="relative min-h-screen">
-      <AuroraBackground />
-      <ErrorOverlay />
-      <AgentSelectorModal />
-      <Routes>
-        <Route
-          path="/"
-          element={
+    <Routes>
+      {/* Public route */}
+      <Route path="/login" element={<LoginPage />} />
+
+      {/* Protected routes */}
+      <Route
+        path="/"
+        element={
+          <RequireAuth>
             <MainLayout
               sidebar={<Sidebar />}
               chat={<ChatPanel />}
               artifactPanel={<ArtifactPanel />}
             />
-          }
-        />
-        <Route
-          path="/chat/:sessionId"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/chat/:sessionId"
+        element={
+          <RequireAuth>
             <MainLayout
               sidebar={<Sidebar />}
               chat={<ChatPanel />}
               artifactPanel={<ArtifactPanel />}
             />
-          }
-        />
-        <Route
-          path="/profile"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <RequireAuth>
             <MainLayout
               sidebar={<Sidebar />}
               chat={<ProfilePage />}
             />
-          }
-        />
-        <Route
-          path="/chat/settings"
-          element={
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/chat/settings"
+        element={
+          <RequireAuth>
             <MainLayout
               sidebar={<Sidebar />}
               chat={<ChatSettingsPage />}
             />
-          }
-        />
-      </Routes>
-    </div>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/agents/:agentId"
+        element={
+          <RequireAuth>
+            <MainLayout
+              sidebar={<Sidebar />}
+              chat={<AgentDetailPage />}
+            />
+          </RequireAuth>
+        }
+      />
+      {/* Settings: ruta base + sub-rutas por sección */}
+      <Route
+        path="/settings"
+        element={
+          <RequireAuth>
+            <MainLayout sidebar={<Sidebar />} chat={<SettingsPage />} />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings/:section"
+        element={
+          <RequireAuth>
+            <MainLayout sidebar={<Sidebar />} chat={<SettingsPage />} />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/billing"
+        element={
+          <RequireAuth>
+            <MainLayout sidebar={<Sidebar />} chat={<BillingPage />} />
+          </RequireAuth>
+        }
+      />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <div className="relative min-h-screen">
+        <AuroraBackground />
+        <ErrorOverlay />
+        <AgentSelectorModal />
+        <PaywallModal />
+        <AuthenticatedApp />
+      </div>
+    </AuthProvider>
   );
 }
 

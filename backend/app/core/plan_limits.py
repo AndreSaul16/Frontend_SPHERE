@@ -43,17 +43,32 @@ RATE_LIMIT_GENERAL_BY_PLAN = {
 }
 
 # Top-ups permitidos por plan.
-ALLOWED_TOPUPS_BY_PLAN = {
+# free → solo topup_free, starter → solo topup_starter,
+# premium → solo paquetes premium.
+ALLOWED_TOPUPS_BY_PLAN: dict[str, set[str]] = {
     "free": {"topup_free"},
-    "starter": {"topup_free", "topup_starter"},
+    "starter": {"topup_starter"},
     "premium": {
-        "topup_free",
-        "topup_starter",
         "topup_premium_1k",
         "topup_premium_2k",
         "topup_premium_10k",
     },
 }
+
+
+def get_user_plan(user: dict) -> str:
+    """Devuelve el plan_id del usuario desde el documento de MongoDB."""
+    return (user.get("subscription") or {}).get("plan_id", "free")
+
+
+def validate_topup_tier(user: dict, topup_plan_id: str) -> bool:
+    """Valida que el top-up solicitado corresponda al tier actual del usuario.
+
+    Returns True si está permitido.
+    """
+    plan_id = get_user_plan(user)
+    allowed = ALLOWED_TOPUPS_BY_PLAN.get(plan_id, ALLOWED_TOPUPS_BY_PLAN["free"])
+    return topup_plan_id in allowed
 
 
 def get_plan_id(user: dict) -> str:

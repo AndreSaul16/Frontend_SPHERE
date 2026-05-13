@@ -13,7 +13,6 @@ from app.infrastructure.database import db
 from app.core.logger import api_logger as logger
 from app.presentation.api.v1 import (
     health,
-    chat,
     stream,
     sessions,
     agents,
@@ -352,13 +351,6 @@ app.include_router(
 )
 app.include_router(auth.router, prefix=f"{settings.API_V1_STR}", tags=["Auth"])
 
-# Chat: rate limit restrictivo (previene abuso en endpoint legacy)
-app.include_router(
-    chat.router,
-    prefix=f"{settings.API_V1_STR}/chat",
-    tags=["Chat"],
-    dependencies=[_optional_rate_limiter(settings.RATE_LIMIT_CHAT_PER_MINUTE, 60)],
-)
 # Stream: sin rate limiter a nivel router — se aplica per-plan dentro del handler
 # después de resolver el usuario (única forma de saber el plan).
 app.include_router(

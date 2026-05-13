@@ -1,0 +1,161 @@
+<mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="none" math="0" shadow="0" adaptiveColors="auto">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+
+    <!-- Containers -->
+    <mxCell id="c_client" value="&lt;b&gt;Client Environment&lt;/b&gt; (Midnight Protocol UI)" style="swimlane;startSize=30;fillColor=#2D3748;strokeColor=#4A5568;fontColor=#FFFFFF;rounded=1;glass=1;html=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="40" width="1000" height="160" as="geometry" />
+    </mxCell>
+
+    <mxCell id="c_docker" value="&lt;b&gt;Docker Host&lt;/b&gt; (sphere-network)" style="swimlane;startSize=30;fillColor=#2C5282;strokeColor=#2B6CB0;fontColor=#FFFFFF;rounded=1;glass=1;html=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="240" width="1000" height="340" as="geometry" />
+    </mxCell>
+
+    <mxCell id="c_cloud" value="&lt;b&gt;Cloud &amp; External Services&lt;/b&gt;" style="swimlane;startSize=30;fillColor=#744210;strokeColor=#975A16;fontColor=#FFFFFF;rounded=1;glass=1;html=1;" vertex="1" parent="1">
+      <mxGeometry x="40" y="620" width="1000" height="180" as="geometry" />
+    </mxCell>
+
+    <!-- Client Layer Children -->
+    <mxCell id="f_react" value="&lt;b&gt;React 19 UI&lt;/b&gt;&lt;br&gt;Vite + Tailwind v4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#2B6CB0;shadow=1;strokeWidth=2;" vertex="1" parent="c_client">
+      <mxGeometry x="60" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="f_zustand" value="&lt;b&gt;Zustand Store&lt;/b&gt;&lt;br&gt;Global State" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#2B6CB0;shadow=1;strokeWidth=2;" vertex="1" parent="c_client">
+      <mxGeometry x="260" y="60" width="140" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="f_auth_client" value="&lt;b&gt;Firebase Auth&lt;/b&gt;&lt;br&gt;Multi-Tenant Session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFAF0;strokeColor=#DD6B20;fontColor=#C05621;shadow=1;strokeWidth=2;" vertex="1" parent="c_client">
+      <mxGeometry x="700" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <!-- Docker Layer Children -->
+    <mxCell id="d_fastapi" value="&lt;b&gt;FastAPI Backend&lt;/b&gt;&lt;br&gt;Core API Gateway" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;fontColor=#276749;shadow=1;strokeWidth=2;" vertex="1" parent="c_docker">
+      <mxGeometry x="60" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="d_rag" value="&lt;b&gt;RAG Engine&lt;/b&gt;&lt;br&gt;Context Injection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FAF5FF;strokeColor=#805AD5;fontColor=#553C9A;shadow=1;strokeWidth=2;" vertex="1" parent="c_docker">
+      <mxGeometry x="60" y="220" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="c_langgraph" value="&lt;b&gt;LangGraph Orchestrator&lt;/b&gt;" style="swimlane;startSize=30;fillColor=#EDF2F7;strokeColor=#A0AEC0;fontColor=#2D3748;rounded=1;html=1;" vertex="1" parent="c_docker">
+      <mxGeometry x="260" y="60" width="380" height="220" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lg_router" value="&lt;b&gt;Intelligent Router&lt;/b&gt;&lt;br&gt;Decision Engine" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFFFF0;strokeColor=#D69E2E;fontColor=#975A16;shadow=1;strokeWidth=2;" vertex="1" parent="c_langgraph">
+      <mxGeometry x="20" y="60" width="140" height="100" as="geometry" />
+    </mxCell>
+
+    <mxCell id="lg_agents" value="&lt;b&gt;Expert Agents&lt;/b&gt;&lt;br&gt;CEO, CTO, CFO, CMO" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F5;strokeColor=#E53E3E;fontColor=#C53030;shadow=1;strokeWidth=2;" vertex="1" parent="c_langgraph">
+      <mxGeometry x="200" y="70" width="150" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="d_vllm" value="&lt;b&gt;vLLM Engine&lt;/b&gt;&lt;br&gt;Local GPU Fallback" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF5F5;strokeColor=#E53E3E;fontColor=#C53030;shadow=1;strokeWidth=2;" vertex="1" parent="c_docker">
+      <mxGeometry x="700" y="220" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <!-- Cloud Layer Children -->
+    <mxCell id="ext_mongo" value="&lt;b&gt;MongoDB Atlas&lt;/b&gt;&lt;br&gt;Document &amp; Vector DB" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#F0FFF4;strokeColor=#38A169;fontColor=#276749;shadow=1;strokeWidth=2;" vertex="1" parent="c_cloud">
+      <mxGeometry x="60" y="50" width="160" height="80" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ext_openai" value="&lt;b&gt;OpenAI API&lt;/b&gt;&lt;br&gt;text-embedding-3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF2F7;strokeColor=#4A5568;fontColor=#2D3748;shadow=1;strokeWidth=2;" vertex="1" parent="c_cloud">
+      <mxGeometry x="260" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ext_deepseek" value="&lt;b&gt;DeepSeek API&lt;/b&gt;&lt;br&gt;Core LLM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF8FF;strokeColor=#3182CE;fontColor=#2B6CB0;shadow=1;strokeWidth=2;" vertex="1" parent="c_cloud">
+      <mxGeometry x="460" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <mxCell id="ext_firebase" value="&lt;b&gt;Firebase Server&lt;/b&gt;&lt;br&gt;Identity &amp; Auth" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFAF0;strokeColor=#DD6B20;fontColor=#C05621;shadow=1;strokeWidth=2;" vertex="1" parent="c_cloud">
+      <mxGeometry x="700" y="60" width="160" height="60" as="geometry" />
+    </mxCell>
+
+    <!-- Edges -->
+    <mxCell id="e_react_fastapi" edge="1" parent="1" source="f_react" target="d_fastapi" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_react_fastapi" value="POST /api/v1/chat" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_react_fastapi">
+      <mxGeometry x="-0.2" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_react_zustand" edge="1" parent="1" source="f_react" target="f_zustand" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;html=1;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+
+    <mxCell id="e_auth_firebase" edge="1" parent="1" source="f_auth_client" target="ext_firebase" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;dashed=1;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_auth_firebase" value="OAuth / JWT" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_auth_firebase">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_fastapi_langgraph" edge="1" parent="1" source="d_fastapi" target="lg_router" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_fastapi_langgraph" value="Orchestrates" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_fastapi_langgraph">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_fastapi_rag" edge="1" parent="1" source="d_fastapi" target="d_rag" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_fastapi_rag" value="Injects Context" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_fastapi_rag">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_router_agents" edge="1" parent="1" source="lg_router" target="lg_agents" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_router_agents" value="Delegates" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_router_agents">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_router_deepseek" edge="1" parent="1" source="lg_router" target="ext_deepseek" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;dashed=1;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_router_deepseek" value="API Prompt" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_router_deepseek">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_router_vllm" edge="1" parent="1" source="lg_router" target="d_vllm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;dashed=1;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_router_vllm" value="Fallback (GPU/CPU)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_router_vllm">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_rag_mongo" edge="1" parent="1" source="d_rag" target="ext_mongo" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;dashed=1;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_rag_mongo" value="Vector Search" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_rag_mongo">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+    <mxCell id="e_rag_openai" edge="1" parent="1" source="d_rag" target="ext_openai" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;dashed=1;html=1;fontColor=#A0AEC0;strokeColor=#718096;">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="lbl_rag_openai" value="Embeddings" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e_rag_openai">
+      <mxGeometry x="0" relative="1" as="geometry">
+        <mxPoint as="offset" />
+      </mxGeometry>
+    </mxCell>
+
+  </root>
+</mxGraphModel>

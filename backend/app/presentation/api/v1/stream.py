@@ -94,6 +94,10 @@ async def generate_chat_events(
         artifact_buffer = ""
         is_inside_artifact = False
         current_board_agent = None  # Track which agent is speaking in board mode
+        # Token cap tracking: accumulate tokens from on_chat_model_end events
+        # to call aadjust_after_completion after the stream completes.
+        total_tokens_in = 0
+        total_tokens_out = 0
 
         async for event in active_orchestrator.astream_events(
             initial_state, config=config, version="v1"
@@ -127,6 +131,17 @@ async def generate_chat_events(
                         current_board_agent = role
                         logger.debug(f"Board meeting: {role} hablando")
                         yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
+
+            # --- A2. CHAT MODEL END — acumular tokens para ajuste post-stream ---
+            if kind == "on_chat_model_end":
+                output = event.get("data", {}).get("output")
+                if output:
+                    usage = getattr(output, "usage_metadata", None)
+                    if usage:
+                        tokens_in = int(usage.get("input_tokens", 0) or 0)
+                        tokens_out = int(usage.get("output_tokens", 0) or 0)
+                        total_tokens_in += tokens_in
+                        total_tokens_out += tokens_out
 
             # --- B. TOOL EXECUTION EVENTS ---
             if kind == "on_tool_start":
@@ -272,6 +287,22 @@ async def generate_chat_events(
         if buffer.strip():
             yield f"data: {json.dumps({'type': 'token', 'content': buffer})}\n\n"
 
+        # Token cap adjustment: si el stream cobró (already_charged=True) y
+        # la inferencia superó el cap de 4k tokens, cobrar mensaje extra.
+        # Esto es SEPARADO del charge inicial — siempre debe ejecutarse.
+        if already_charged and charge_ctx and credit_manager is not None and (total_tokens_in + total_tokens_out) > 0:
+            cost_actual = (total_tokens_in * 0.27 + total_tokens_out * 1.10) / 1_000_000
+            try:
+                await credit_manager.aadjust_after_completion(
+                    charge_ctx, total_tokens_in, total_tokens_out, cost_actual
+                )
+                logger.debug(
+                    f"Post-stream adjustment: {total_tokens_in}+{total_tokens_out} tokens "
+                    f"para user {user_id}"
+                )
+            except Exception as e:
+                logger.error(f"Error en post-stream adjustment para {user_id}: {e}")
+
         yield "data: [DONE]\n\n"
         logger.info(f"Stream finalizado para sesión: {session_id}")
 
@@ -317,7 +348,7 @@ async def chat_stream_endpoint(
             rate = Rate(times, Duration.SECOND * seconds)
             limiter = Limiter(rate)
             # Usar user_id como identificador (ya viene del JWT)
-            if not limiter.try_acquire(user_id):
+            if not limiter.try_acquire(user_id, blocking=False):
                 raise HTTPException(
                     status_code=429,
                     detail={
@@ -325,6 +356,18 @@ async def chat_stream_endpoint(
                         "message": f"Rate limit exceeded. Tu plan ({plan_id}) permite {times} requests por {seconds}s.",
                     },
                 )
+
+        # Email verification gate — debe ir ANTES del credit check.
+        # Es un gate de autorización más fundamental que el billing.
+        subscription = user.get("subscription") or {}
+        if subscription.get("status") == "email_unverified":
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "email_unverified",
+                    "message": "Verifica tu email antes de usar SPHERE.",
+                },
+            )
 
         # Pre-check de créditos ANTES de abrir SSE.
         wallet = user.get("wallet") or {}
@@ -338,17 +381,6 @@ async def chat_stream_endpoint(
                 detail={
                     "error": "insufficient_credits",
                     "message": "Has agotado tus mensajes. Sube de plan o compra un top-up.",
-                },
-            )
-
-        # Email verification gate
-        subscription = user.get("subscription") or {}
-        if subscription.get("status") == "email_unverified":
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "email_unverified",
-                    "message": "Verifica tu email antes de usar SPHERE.",
                 },
             )
 

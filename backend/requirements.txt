@@ -1,6 +1,7 @@
 # Dependencias básicas del backend SPHERE
 fastapi
 uvicorn[standard]
+python-multipart
 requests
 pydantic
 pydantic-settings
@@ -18,7 +19,25 @@ langchain-mongodb
 langgraph
 langgraph-checkpoint-mongodb
 
+# --- Autenticación y Seguridad ---
+firebase-admin
+cryptography
+authlib
+httpx-oauth
+
+# --- Rate Limiting y Redis ---
+redis[hiredis]
+fastapi-limiter
+pyrate_limiter
+
+# --- Resilience ---
+tenacity
+
+# --- Pagos ---
+stripe
+
 # --- Dependencias de Testing ---
 pytest
 pytest-asyncio
 httpx
+fakeredis

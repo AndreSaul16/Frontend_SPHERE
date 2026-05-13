@@ -1,0 +1,80 @@
+{
+  "name": "SPHERE - WhatsApp Send",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "shared/whatsapp-send",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.whatsapp || {};\n\nreturn [{\n  json: {\n    access_token: creds.access_token || '',\n    phone_number_id: creds.phone_number_id || '',\n    to: payload.to,\n    message: payload.message\n  }\n}];"
+      },
+      "id": "code-1",
+      "name": "Extract Credentials",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{ $json.phone_number_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.to }}\",\n  \"text\": {\n    \"body\": \"{{ $json.message }}\"\n  }\n}",
+        "options": {}
+      },
+      "id": "http-1",
+      "name": "WhatsApp API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-1",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]]
+    },
+    "Extract Credentials": {
+      "main": [[{"node": "WhatsApp API", "type": "main", "index": 0}]]
+    },
+    "WhatsApp API": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "SPHERE" }]
+}

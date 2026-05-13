@@ -1,4 +1,14 @@
-# Logs
+# ===========================
+# SPHERE Frontend — .gitignore
+# ===========================
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.env.bak
+
+# --- Logs ---
 logs
 *.log
 npm-debug.log*
@@ -7,18 +17,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# --- Node ---
 node_modules
 dist
 dist-ssr
 *.local
+coverage/
 
-# Editor directories and files
+# --- IDE & Editors ---
 .vscode/*
 !.vscode/extensions.json
 .idea
+*.swp
+*.swo
+*.swn
+
+# --- OS ---
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+
+# --- Docker ---
+.dockerignore
