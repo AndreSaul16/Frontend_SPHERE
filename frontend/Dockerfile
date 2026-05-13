@@ -37,4 +37,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-# nginx-entrypoint procesa los templates y luego ejecuta nginx -g 'daemon off;'
+CMD ["nginx", "-g", "daemon off;"]
