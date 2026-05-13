@@ -3,6 +3,7 @@ Firebase Auth middleware + auto-provisioning de usuarios.
 Verifica ID tokens de Firebase y crea el documento User si no existe.
 """
 
+import json
 import firebase_admin
 from firebase_admin import auth as firebase_auth, credentials
 from fastapi import Depends, HTTPException, Request
@@ -23,21 +24,33 @@ def init_firebase():
     if _firebase_initialized:
         return
 
-    if not settings.FIREBASE_CREDENTIALS_PATH:
-        logger.warning(
-            "FIREBASE_CREDENTIALS_PATH no configurado. "
-            "Auth estará deshabilitado (modo desarrollo)."
-        )
-        return
+    # Railway-friendly: aceptar JSON como variable de entorno
+    if settings.FIREBASE_CREDENTIALS_JSON:
+        try:
+            cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            _firebase_initialized = True
+            logger.info("Firebase Admin SDK inicializado desde FIREBASE_CREDENTIALS_JSON")
+            return
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"FIREBASE_CREDENTIALS_JSON inválido: {e}")
+            raise
+    elif settings.FIREBASE_CREDENTIALS_PATH:
+        try:
+            cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
+            firebase_admin.initialize_app(cred)
+            _firebase_initialized = True
+            logger.info("Firebase Admin SDK inicializado desde archivo")
+            return
+        except Exception as e:
+            logger.error(f"Error inicializando Firebase desde archivo: {e}")
+            raise
 
-    try:
-        cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
-        firebase_admin.initialize_app(cred)
-        _firebase_initialized = True
-        logger.info("Firebase Admin SDK inicializado correctamente")
-    except Exception as e:
-        logger.error(f"Error inicializando Firebase: {e}")
-        raise
+    logger.warning(
+        "FIREBASE_CREDENTIALS_PATH/FIREBASE_CREDENTIALS_JSON no configurado. "
+        "Auth estará deshabilitado (modo desarrollo)."
+    )
 
 
 async def _verify_token(token: str) -> dict:

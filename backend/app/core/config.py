@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Firebase Auth
     FIREBASE_CREDENTIALS_PATH: str = ""
+    FIREBASE_CREDENTIALS_JSON: str = ""  # Contenido del JSON (Railway-friendly)
 
     # Cifrado de tokens OAuth en reposo
     FERNET_KEY: str = ""
