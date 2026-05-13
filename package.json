@@ -1,0 +1,8 @@
+{
+  "name": "sphere-frontend",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm ci && npm run build",
+    "start": "cd frontend && npm run preview -- --port $PORT --host 0.0.0.0"
+  }
+}
