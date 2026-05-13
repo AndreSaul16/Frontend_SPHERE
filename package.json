@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "cd frontend && npm ci && npm run build",
+    "postinstall": "cd frontend && npm ci",
     "start": "cd frontend && npm run preview -- --port $PORT --host 0.0.0.0"
   }
 }
