@@ -20,5 +20,11 @@ export default defineConfig({
       usePolling: true, // Necesario en Windows/WSL2 para que el hot-reload funcione bien
     },
   },
+  preview: {
+    host: true,
+    port: 3000,
+    strictPort: true,
+    allowedHosts: ['.railway.app'],
+  },
 })
 
