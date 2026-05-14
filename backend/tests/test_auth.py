@@ -1,8 +1,9 @@
 """
-Tests de autenticación: verificación de token, auto-provisioning, 401.
+Tests de autenticación: verificación de token, auto-provisioning, 401,
+hardening de wallet (CS-001, CS-002).
 """
 import pytest
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 from httpx import AsyncClient, ASGITransport
 
 
@@ -80,3 +81,175 @@ async def test_create_session_injects_user_id(authed_client_a):
     data = resp.json()
     # El user_id debe venir del JWT, no del body
     assert data["user_id"] == "test_user_a"
+
+
+# ---------------------------------------------------------------------------
+# CS-001 / CS-002: Wallet hardening — _ensure_wallet unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureWallet:
+    """Tests para _ensure_wallet: detección y reparación de wallets inválidos."""
+
+    @pytest.mark.asyncio
+    async def test_ensure_wallet_with_empty_dict_reinitializes(self):
+        """CS-001: wallet={} → debe re-inicializarse con 5 créditos."""
+        from app.core.auth import _ensure_wallet
+        from datetime import datetime, timezone
+
+        user_doc = {
+            "firebase_uid": "user_empty_wallet",
+            "email": "test@sphere.local",
+            "email_verified": True,
+            "wallet": {},
+        }
+
+        mock_collection = AsyncMock()
+        mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _ensure_wallet("user_empty_wallet", user_doc)
+
+        # Debe haber llamado a update_one para persistir el wallet reparado
+        mock_collection.update_one.assert_called_once()
+        call_args = mock_collection.update_one.call_args
+        update_filter = call_args[0][0]
+        update_operation = call_args[0][1]
+
+        assert update_filter == {"firebase_uid": "user_empty_wallet"}
+        assert "$set" in update_operation
+        # El wallet reparado debe tener pro_messages_balance = 5 (plan free)
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
+        # El resultado debe incluir el wallet reparado
+        assert "wallet" in result
+        assert result["wallet"]["pro_messages_balance"] == 5
+
+    @pytest.mark.asyncio
+    async def test_ensure_wallet_with_none_wallet_reinitializes(self):
+        """CS-001: wallet=None → debe re-inicializarse con 5 créditos."""
+        from app.core.auth import _ensure_wallet
+
+        user_doc = {
+            "firebase_uid": "user_none_wallet",
+            "email": "test@sphere.local",
+            "email_verified": True,
+            "wallet": None,
+        }
+
+        mock_collection = AsyncMock()
+        mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _ensure_wallet("user_none_wallet", user_doc)
+
+        mock_collection.update_one.assert_called_once()
+        call_args = mock_collection.update_one.call_args
+        update_operation = call_args[0][1]
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
+        assert result["wallet"]["pro_messages_balance"] == 5
+
+    @pytest.mark.asyncio
+    async def test_ensure_wallet_with_valid_wallet_passes_through(self):
+        """CS-002: wallet válido con pro_messages_balance → no modificar."""
+        from app.core.auth import _ensure_wallet
+
+        valid_wallet = {
+            "pro_messages_balance": 3,
+            "topup_messages_balance": 0,
+            "pro_messages_granted_this_period": 5,
+            "last_period_reset": "2024-01-01T00:00:00Z",
+        }
+        user_doc = {
+            "firebase_uid": "user_valid_wallet",
+            "email": "test@sphere.local",
+            "email_verified": True,
+            "wallet": valid_wallet,
+        }
+
+        mock_collection = AsyncMock()
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _ensure_wallet("user_valid_wallet", user_doc)
+
+        # No debe llamar a update_one — wallet ya es válido
+        mock_collection.update_one.assert_not_called()
+        # El wallet debe volver intacto
+        assert result["wallet"] == valid_wallet
+
+    @pytest.mark.asyncio
+    async def test_ensure_wallet_missing_pro_key_reinitializes(self):
+        """CS-001: wallet sin pro_messages_balance → debe re-inicializarse."""
+        from app.core.auth import _ensure_wallet
+
+        user_doc = {
+            "firebase_uid": "user_missing_key",
+            "email": "test@sphere.local",
+            "email_verified": True,
+            "wallet": {"topup_messages_balance": 0},
+        }
+
+        mock_collection = AsyncMock()
+        mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _ensure_wallet("user_missing_key", user_doc)
+
+        mock_collection.update_one.assert_called_once()
+        call_args = mock_collection.update_one.call_args
+        update_operation = call_args[0][1]
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
+        assert result["wallet"]["pro_messages_balance"] == 5
+        assert result["wallet"]["topup_messages_balance"] == 0
+
+
+# ---------------------------------------------------------------------------
+# CS-003: _repair_wallet unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepairWallet:
+    """Tests para _repair_wallet: idempotencia y reparación de wallets."""
+
+    @pytest.mark.asyncio
+    async def test_repair_wallet_fixes_invalid_wallet(self):
+        """CS-003: wallet inválido → _repair_wallet lo inicializa con 5 créditos."""
+        from app.core.auth import _repair_wallet
+
+        user_doc = {
+            "firebase_uid": "user_repair",
+            "email": "test@sphere.local",
+            "wallet": {},
+        }
+
+        mock_collection = AsyncMock()
+        mock_collection.update_one = AsyncMock(return_value=MagicMock(modified_count=1))
+
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _repair_wallet("user_repair", user_doc)
+
+        mock_collection.update_one.assert_called_once()
+        call_args = mock_collection.update_one.call_args
+        assert call_args[0][0] == {"firebase_uid": "user_repair"}
+        assert call_args[0][1]["$set"]["wallet.pro_messages_balance"] == 5
+        assert result["wallet"]["pro_messages_balance"] == 5
+
+    @pytest.mark.asyncio
+    async def test_repair_wallet_preserves_valid_wallet(self):
+        """CS-002 / CS-003: wallet válido → _repair_wallet NO lo modifica."""
+        from app.core.auth import _repair_wallet
+
+        valid_wallet = {
+            "pro_messages_balance": 3,
+            "topup_messages_balance": 50,
+        }
+        user_doc = {
+            "firebase_uid": "user_valid_repair",
+            "email": "test@sphere.local",
+            "wallet": valid_wallet,
+        }
+
+        mock_collection = AsyncMock()
+        with patch("app.core.auth.get_users_collection", return_value=mock_collection):
+            result = await _repair_wallet("user_valid_repair", user_doc)
+
+        mock_collection.update_one.assert_not_called()
+        assert result["wallet"] == valid_wallet

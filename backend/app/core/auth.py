@@ -102,11 +102,30 @@ async def _verify_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Error de autenticación")
 
 
+def _is_wallet_valid(wallet) -> bool:
+    """Un wallet es válido si es un dict que contiene la clave pro_messages_balance."""
+    return isinstance(wallet, dict) and "pro_messages_balance" in wallet
+
+
 async def _ensure_wallet(uid: str, user_doc: dict) -> dict:
     """Lazy wallet init: usuarios legacy creados sin campo wallet.
-    Respeta email_verified: si no está verificado, balance=0."""
-    if "wallet" in user_doc:
+    Respeta email_verified: si no está verificado, balance=0.
+    
+    Wallet hardening (CS-001): wallets vacíos, nulos o sin pro_messages_balance
+    se consideran inválidos y se re-inicializan. Un wallet válido debe ser
+    un dict que contenga la clave pro_messages_balance.
+    """
+    wallet = user_doc.get("wallet")
+    if _is_wallet_valid(wallet):
         return user_doc
+
+    # Wallet inválido o ausente → log y re-inicializar
+    if wallet is not None:
+        logger.warning(
+            f"Wallet inválido detectado para usuario {uid}: "
+            f"tipo={type(wallet).__name__}, contiene={list(wallet.keys()) if isinstance(wallet, dict) else 'N/A'}. "
+            f"Re-inicializando."
+        )
     from datetime import datetime, timezone
 
     email_verified = user_doc.get("email_verified", True)
@@ -131,6 +150,51 @@ async def _ensure_wallet(uid: str, user_doc: dict) -> dict:
         "topup_messages_balance": 0,
     }
     logger.info(f"Wallet inicializado (lazy) para usuario legacy: {uid}")
+    return user_doc
+
+
+async def _repair_wallet(uid: str, user_doc: dict) -> dict:
+    """Repara wallets inválidos para usuarios existentes (CS-003).
+    
+    Idempotente: si el wallet ya es válido (dict con pro_messages_balance),
+    retorna el user_doc sin modificaciones. Si es inválido (None, {}, o sin
+    la clave pro_messages_balance), lo re-inicializa con 5 créditos free.
+    
+    Puede llamarse desde un endpoint admin o desde un health check para
+    migrar/recuperar usuarios legacy con wallets corruptos.
+    """
+    wallet = user_doc.get("wallet")
+    if _is_wallet_valid(wallet):
+        return user_doc
+
+    logger.warning(
+        f"_repair_wallet: reparando wallet inválido para usuario {uid}. "
+        f"Wallet actual: {wallet!r}"
+    )
+    from datetime import datetime, timezone
+
+    email_verified = user_doc.get("email_verified", True)
+    pro_messages = settings.plan_messages_map["free"] if email_verified else 0
+
+    users_col = get_users_collection()
+    now = datetime.now(timezone.utc)
+    wallet_init = {
+        "wallet.pro_messages_balance": pro_messages,
+        "wallet.pro_messages_granted_this_period": pro_messages,
+        "wallet.last_period_reset": now,
+        "wallet.topup_messages_balance": 0,
+    }
+    await users_col.update_one(
+        {"firebase_uid": uid},
+        {"$set": wallet_init},
+    )
+    user_doc["wallet"] = {
+        "pro_messages_balance": pro_messages,
+        "pro_messages_granted_this_period": pro_messages,
+        "last_period_reset": now,
+        "topup_messages_balance": 0,
+    }
+    logger.info(f"Wallet reparado para usuario {uid}: {pro_messages} créditos free")
     return user_doc
 
 
