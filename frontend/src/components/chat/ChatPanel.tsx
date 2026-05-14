@@ -8,6 +8,7 @@ import { MessageBubble } from "./MessageBubble";
 import { cn } from "@/lib/utils";
 import { exportAsMarkdown, downloadAsFile } from "@/utils/exportChat";
 import { CreditsIndicator } from "@/components/CreditsIndicator";
+import { useBillingStore } from "@/store/useBillingStore";
 
 export function ChatPanel() {
     const navigate = useNavigate();
@@ -52,6 +53,17 @@ export function ChatPanel() {
             chatService.getPins(currentSessionId).then(setPinnedMessages).catch(() => {});
         }
     }, [currentSessionId]);
+
+    // Refresh billing balance after streaming completes
+    const prevIsTypingRef = useRef(isTyping);
+    useEffect(() => {
+        const prev = prevIsTypingRef.current;
+        prevIsTypingRef.current = isTyping;
+        // When streaming transitions from true → false, sync real balance
+        if (prev && !isTyping) {
+            useBillingStore.getState().refresh();
+        }
+    }, [isTyping]);
 
     // Color efectivo: priorizar bubble_color de sesión > color de sesión > hexColor del agente
     const effectiveBubbleColor = currentSession?.visual_config?.bubble_color
@@ -128,6 +140,8 @@ export function ChatPanel() {
         if (!inputValue.trim()) return;
         sendMessage(inputValue);
         setInputValue("");
+        // Decremento optimista del balance de mensajes
+        useBillingStore.getState().decrementOptimistic();
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

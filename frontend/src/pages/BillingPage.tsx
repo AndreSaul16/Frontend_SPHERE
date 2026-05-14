@@ -24,6 +24,26 @@ const PREMIUM_TOPUPS: Array<{ plan_id: string; label: string; price: string }> =
     { plan_id: 'topup_premium_10k', label: '10.000 msg', price: '€74.99' },
 ];
 
+/** Skeleton para el estado de carga del panel de facturación */
+const BillingSkeleton: React.FC = () => (
+    <div data-testid="billing-loading" className="p-8 text-white w-full max-w-5xl mx-auto animate-pulse">
+        <div className="h-9 bg-slate-700/50 rounded-lg w-64 mb-8" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+                <div className="h-6 bg-slate-700/50 rounded w-40" />
+                <div className="h-10 bg-slate-700/50 rounded w-24" />
+                <div className="h-4 bg-slate-700/50 rounded w-32" />
+            </div>
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+                <div className="h-6 bg-slate-700/50 rounded w-48" />
+                <div className="h-8 bg-slate-700/50 rounded w-full" />
+                <div className="h-8 bg-slate-700/50 rounded w-full" />
+                <div className="h-8 bg-slate-700/50 rounded w-full" />
+            </div>
+        </div>
+    </div>
+);
+
 export const BillingPage: React.FC = () => {
     const {
         plan_id,
@@ -32,6 +52,10 @@ export const BillingPage: React.FC = () => {
         topup_messages_balance,
         current_period_end,
         cancel_at_period_end,
+        loaded,
+        isLoading,
+        error,
+        stripe_configured,
         refresh,
     } = useBillingStore();
 
@@ -57,12 +81,14 @@ export const BillingPage: React.FC = () => {
             if (!response.ok) {
                 const text = await response.text();
                 console.error('Checkout error', response.status, text);
+                alert('Error al procesar el pago. Intenta de nuevo en unos minutos.');
                 return;
             }
             const data = await response.json();
             if (data.url) window.location.href = data.url;
         } catch (error) {
             console.error('Checkout error:', error);
+            alert('Error al procesar el pago. Intenta de nuevo en unos minutos.');
         }
     };
 
@@ -86,9 +112,42 @@ export const BillingPage: React.FC = () => {
 
     const totalBalance = pro_messages_balance + topup_messages_balance;
 
+    // Loading state: skeleton mientras se obtienen los datos por primera vez
+    if (isLoading && !loaded) {
+        return <BillingSkeleton />;
+    }
+
+    // Error state: mostrar error con botón de reintento
+    if (error) {
+        return (
+            <div className="p-8 text-white w-full max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh] gap-6">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center max-w-md">
+                    <div className="text-4xl mb-4">⚠️</div>
+                    <h2 className="text-xl font-bold text-red-400 mb-2">Error de conexión</h2>
+                    <p className="text-slate-300 mb-6">{error}</p>
+                    <button
+                        onClick={refresh}
+                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors font-medium"
+                    >
+                        Reintentar
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="p-8 text-white w-full max-w-5xl mx-auto">
             <h1 className="text-3xl font-bold mb-8">Facturación y Planes</h1>
+
+            {/* Stripe no configurado: aviso */}
+            {!stripe_configured && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-8 text-center">
+                    <p className="text-amber-400 font-medium">
+                        ⚠️ Pagos no disponibles — el sistema de pagos no está configurado en este momento.
+                    </p>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
                 <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
@@ -129,7 +188,9 @@ export const BillingPage: React.FC = () => {
                 </div>
             </div>
 
-            <h2 className="text-2xl font-bold mb-6">Planes</h2>
+            {/* Si Stripe no está configurado, ocultar secciones de pago */}
+            {stripe_configured && <>
+                    <h2 className="text-2xl font-bold mb-6">Planes</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
                 <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 flex flex-col">
                     <h3 className="text-lg font-bold mb-2">Free</h3>
@@ -228,6 +289,8 @@ export const BillingPage: React.FC = () => {
                     </div>
                 </div>
             </div>
+            </>
+            }
         </div>
     );
 };
