@@ -39,18 +39,18 @@ Chain strategy: feature-branch-chain
 
 ## Phase 2: Frontend Experience (Balance UX + Stripe + Scroll)
 
-- [ ] 2.1 Add Firebase auth-ready gate to `useBillingStore.refresh()` in `frontend/src/store/useBillingStore.ts` (poll `auth.currentUser` every 100ms, 5s max) + retry with backoff (1s/2s/4s, 3 attempts) + `isLoading` flag
-- [ ] 2.2 Wire `decrementOptimistic()` call in `frontend/src/components/chat/ChatPanel.tsx` after each successful message send
-- [ ] 2.3 Add loading skeleton, error state, `stripe_configured` handling (hide buttons + "Pagos no disponibles"), and checkout error alert in `frontend/src/pages/BillingPage.tsx`
-- [ ] 2.4 Fix scroll: change `overflow-hidden` → `overflow-y-auto` on root div in `frontend/src/pages/SettingsPage.tsx:50`, add `pointer-events-none` to decorative blobs if present
-- [ ] 2.5 **Tests**: `frontend/tests/components/BillingPage.test.tsx` — loading skeleton, error state, Stripe-disabled button absence, checkout error toast (BF-001, BF-002, BF-004)
+- [x] 2.1 Add Firebase auth-ready gate to `useBillingStore.refresh()` in `frontend/src/store/useBillingStore.ts` (poll `auth.currentUser` every 100ms, 5s max) + retry with backoff (1s/2s/4s, 3 attempts) + `isLoading` flag
+- [x] 2.2 Wire `decrementOptimistic()` call in `frontend/src/components/chat/ChatPanel.tsx` after each successful message send
+- [x] 2.3 Add loading skeleton, error state, `stripe_configured` handling (hide buttons + "Pagos no disponibles"), and checkout error alert in `frontend/src/pages/BillingPage.tsx`
+- [x] 2.4 Fix scroll: change `overflow-hidden` → `overflow-y-auto` on root div in `frontend/src/pages/SettingsPage.tsx:50`, add `pointer-events-none` to decorative blobs if present
+- [x] 2.5 **Tests**: `frontend/tests/components/BillingPage.test.tsx` — loading skeleton, error state, Stripe-disabled button absence, checkout error toast (BF-001, BF-002, BF-004)
 
 ## Phase 3: Infrastructure (n8n Deployment)
 
-- [ ] 3.1 Create `railway.toml` in project root: n8n service with `n8nio/n8n:latest`, port 5678, env vars `N8N_HOST`, `N8N_PORT`, `N8N_PROTOCOL`, `WEBHOOK_URL` (IN-001)
+- [x] 3.1 Create `railway.toml` in project root: n8n service with `n8nio/n8n:latest`, port 5678, env vars `N8N_HOST`, `N8N_PORT`, `N8N_PROTOCOL`, `WEBHOOK_URL` (IN-001)
 
 ## Phase 4: Verification
 
-- [ ] 4.1 Run `pytest backend/tests/` — all backend tests pass, CS-001/CS-002/CS-003/IN-001 scenarios verified
-- [ ] 4.2 Run `vitest frontend/tests/` — all frontend tests pass, BF-001/BF-002/BF-004/SP-001 scenarios verified
-- [ ] 4.3 Manual visual: SettingsPage mobile viewport (375px), verify scroll + sticky tab bar
+- [x] 4.1 Run `pytest backend/tests/` — all backend tests pass, CS-001/CS-002/CS-003/IN-001 scenarios verified
+- [x] 4.2 Run `vitest frontend/tests/` — all frontend tests pass, BF-001/BF-002/BF-004/SP-001 scenarios verified
+- [x] 4.3 Manual visual: SettingsPage mobile viewport (375px), verify scroll + sticky tab bar
