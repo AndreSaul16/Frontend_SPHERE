@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         return self.ENVIRONMENT.lower() in ("development", "dev", "local")
 
+    @property
+    def stripe_configured(self) -> bool:
+        """True cuando STRIPE_SECRET_KEY está configurada (no vacía).
+        Usado por el frontend para decidir si mostrar UI de pagos."""
+        return bool(self.STRIPE_SECRET_KEY and self.STRIPE_SECRET_KEY.strip())
+
     model_config = SettingsConfigDict(
         case_sensitive=True,
         env_file=str(ENV_FILE_PATH),

@@ -1,6 +1,7 @@
 import pytest
+import os
+from unittest.mock import patch, MagicMock
 from httpx import AsyncClient
-from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Fixtures: plan-varied profiles
@@ -221,4 +222,63 @@ class TestWebhookTopupDefense:
         })
         assert tx_count == 0, (
             f"Se crearon {tx_count} transacciones de top-up inesperadas"
+        )
+
+
+# ---------------------------------------------------------------------------
+# BF-003: Stripe config flag tests
+# ---------------------------------------------------------------------------
+
+
+class TestStripeConfiguredFlag:
+    """Tests para stripe_configured: flag computado desde STRIPE_SECRET_KEY."""
+
+    def test_stripe_configured_true_when_key_present(self):
+        """BF-003: STRIPE_SECRET_KEY no vacío → stripe_configured=True."""
+        from app.core.config import Settings
+        s = Settings(STRIPE_SECRET_KEY="sk_test_valid", MONGODB_URL="mongodb://localhost")
+        assert s.stripe_configured is True
+
+    def test_stripe_configured_false_when_key_empty(self):
+        """BF-003: STRIPE_SECRET_KEY vacío → stripe_configured=False."""
+        from app.core.config import Settings
+        s = Settings(STRIPE_SECRET_KEY="", MONGODB_URL="mongodb://localhost")
+        assert s.stripe_configured is False
+
+    def test_stripe_configured_false_when_key_whitespace(self):
+        """BF-003: STRIPE_SECRET_KEY solo espacios → stripe_configured=False."""
+        from app.core.config import Settings
+        s = Settings(STRIPE_SECRET_KEY="   ", MONGODB_URL="mongodb://localhost")
+        assert s.stripe_configured is False
+
+    def test_stripe_configured_true_with_surrounding_whitespace(self):
+        """BF-003: STRIPE_SECRET_KEY con espacios alrededor → stripe_configured=True."""
+        from app.core.config import Settings
+        s = Settings(STRIPE_SECRET_KEY="  sk_test_abc  ", MONGODB_URL="mongodb://localhost")
+        assert s.stripe_configured is True
+
+
+class TestBillingMeStripeConfigured:
+    """Tests de integración: GET /billing/me incluye stripe_configured."""
+
+    @pytest.mark.asyncio
+    async def test_billing_me_includes_stripe_configured(self, authed_client_a, db_instance):
+        """BF-003: GET /billing/me debe incluir el campo stripe_configured."""
+        db = db_instance.get_async_db()
+        await db["users"].update_one(
+            {"firebase_uid": "test_user_a"},
+            {"$set": {
+                "wallet": {"pro_messages_balance": 5, "topup_messages_balance": 0},
+                "subscription": {"plan_id": "free", "status": "active"},
+            }}
+        )
+
+        response = await authed_client_a.get("/api/v1/billing/me")
+        assert response.status_code == 200
+        data = response.json()
+        assert "stripe_configured" in data, (
+            f"El response debe tener el campo stripe_configured. Keys: {list(data.keys())}"
+        )
+        assert isinstance(data["stripe_configured"], bool), (
+            f"stripe_configured debe ser bool, es {type(data['stripe_configured'])}"
         )
