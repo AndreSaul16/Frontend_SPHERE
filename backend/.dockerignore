@@ -5,3 +5,19 @@ __pycache__
 venv
 .pytest_cache
 .mypy_cache
+
+# Exclude non-runtime directories
+tests/
+docs/
+credentials/
+scripts/
+
+# Exclude markdown and documentation files
+*.md
+*.MD
+ARCHITECTURE.md
+PLAN_PAGOS.md
+SETUP.md
+RAILWAY.md
+ragnarok_deploy.md
+ragnaroc_plan.md
