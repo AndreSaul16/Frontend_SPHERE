@@ -1,43 +1,45 @@
-# Dependencias básicas del backend SPHERE
-fastapi
-uvicorn[standard]
-python-multipart
-requests
-pydantic
-pydantic-settings
-motor
-openai
-python-dotenv
-certifi
-colorama  # Para logs con colores en Windows
+# Generated on Python 3.14 / linux x86_64 via pip freeze
+# Dependencias del backend SPHERE
+
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+python-multipart==0.0.29
+requests==2.34.2
+pydantic==2.13.4
+pydantic-settings==2.14.1
+motor==3.7.1
+openai==2.37.0
+python-dotenv==1.2.2
+certifi==2026.5.20
+colorama==0.4.6
 
 # --- Librerías de IA Agéntica ---
-langchain
-langchain-core
-langchain-openai
-langchain-mongodb
-langgraph
-langgraph-checkpoint-mongodb
+langchain==1.3.1
+langchain-core==1.4.0
+langchain-openai==1.2.1
+langchain-mongodb==0.11.0
+langgraph==1.2.1
+langgraph-checkpoint-mongodb==0.4.0
 
 # --- Autenticación y Seguridad ---
-firebase-admin
-cryptography
-authlib
-httpx-oauth
+firebase-admin==7.4.0
+cryptography==48.0.0
+authlib==1.7.2
+httpx-oauth==0.17.0
 
 # --- Rate Limiting y Redis ---
-redis[hiredis]
-fastapi-limiter
-pyrate_limiter
+redis[hiredis]==7.4.0
+fastapi-limiter==0.2.0
+pyrate-limiter==4.1.0
 
 # --- Resilience ---
-tenacity
+tenacity==9.1.4
 
 # --- Pagos ---
-stripe
+stripe==15.1.0
 
 # --- Dependencias de Testing ---
-pytest
-pytest-asyncio
-httpx
-fakeredis
+pytest==9.0.3
+pytest-asyncio==1.3.0
+httpx==0.28.1
+fakeredis==2.35.1
