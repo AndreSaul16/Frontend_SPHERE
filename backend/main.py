@@ -67,6 +67,16 @@ def _validate_env_vars():
             f"Configura tu .env antes de arrancar."
         )
 
+    # Stripe config validation (AD5): no es bloqueante, pero loguea CRITICAL si falta
+    if settings.stripe_configured:
+        logger.info("Stripe configurado — pagos habilitados")
+    else:
+        logger.critical(
+            "STRIPE_SECRET_KEY no configurada. "
+            "Los pagos estarán DESHABILITADOS. "
+            "El frontend usará stripe_configured=false para ocultar la UI de pagos."
+        )
+
     missing_prod = [k for k, v in prod_critical.items() if not v]
     if missing_prod:
         if settings.is_production:

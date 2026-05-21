@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # Firebase Auth
     FIREBASE_CREDENTIALS_PATH: str = ""
+    FIREBASE_CREDENTIALS_JSON: str = ""  # Contenido del JSON (Railway-friendly)
 
     # Cifrado de tokens OAuth en reposo
     FERNET_KEY: str = ""
@@ -105,6 +106,12 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.ENVIRONMENT.lower() in ("development", "dev", "local")
+
+    @property
+    def stripe_configured(self) -> bool:
+        """True cuando STRIPE_SECRET_KEY está configurada (no vacía).
+        Usado por el frontend para decidir si mostrar UI de pagos."""
+        return bool(self.STRIPE_SECRET_KEY and self.STRIPE_SECRET_KEY.strip())
 
     model_config = SettingsConfigDict(
         case_sensitive=True,

@@ -47,7 +47,7 @@ export function SettingsPage() {
   if (!active) return <Navigate to="/settings/profile" replace />;
 
   return (
-    <div className="flex flex-col h-full bg-midnight/40 relative overflow-hidden">
+    <div className="flex flex-col h-full bg-midnight/40 relative overflow-y-auto">
       {/* Header */}
       <div className="h-14 sm:h-16 pl-14 lg:pl-6 pr-3 sm:pr-6 border-b border-surface flex items-center gap-3 bg-midnight/90 backdrop-blur-md sticky top-0 z-10">
         <Link
