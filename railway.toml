@@ -16,3 +16,7 @@ dockerfilePath = "Dockerfile.n8n"
 healthcheckPath = "/healthz"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+# Persist n8n workflow data across container restarts
+[deploy.volume]
+mountPath = "/home/node/.n8n"
