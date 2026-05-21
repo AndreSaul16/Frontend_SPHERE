@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npm start"
+# No start command here — Dockerfile CMD ["nginx", "-g", "daemon off;"] handles process
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
