@@ -9,6 +9,8 @@
 *.env.bak
 *.env.7z
 *firebase-adminsdk*.json
+firebase.json
+*serviceaccount*.json
 credentials/
 
 # --- Python ---
