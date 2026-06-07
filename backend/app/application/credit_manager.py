@@ -33,6 +33,9 @@ class ChargeContext(BaseModel):
 COST_USD_ESTIMATED_PER_MESSAGE = 0.004
 # Cap de tokens por mensaje. >cap → cuenta como 2.
 TOKEN_CAP_PER_MESSAGE = 4000
+# Un board meeting ejecuta ~5 agentes (CEO/CTO/CFO/CMO + conclusión) ×(1-2 iter),
+# por lo que consume ~5× el cómputo de un chat normal. Se cobra como 5 créditos.
+BOARD_MEETING_COST = 5
 
 
 class CreditManager:
@@ -49,9 +52,11 @@ class CreditManager:
         agent_id: str,
         model: str,
         request_id: Optional[str] = None,
+        is_board: bool = False,
     ) -> ChargeContext:
-        """Operación atómica: chequea y deduce 1 mensaje. Lanza InsufficientCreditsError si no hay saldo."""
-        cost = self._resolve_cost(agent_id, model)
+        """Operación atómica: chequea y deduce el coste (1 mensaje normal, 5 si es
+        board meeting). Lanza InsufficientCreditsError si no hay saldo."""
+        cost = self._resolve_cost(agent_id, model, is_board=is_board)
 
         # 1) Intentar plan primero.
         result = self.users_collection.find_one_and_update(
@@ -165,9 +170,10 @@ class CreditManager:
         agent_id: str,
         model: str,
         request_id: Optional[str] = None,
+        is_board: bool = False,
     ) -> ChargeContext:
         return await asyncio.to_thread(
-            self.reserve_and_charge, user_id, agent_id, model, request_id
+            self.reserve_and_charge, user_id, agent_id, model, request_id, is_board
         )
 
     async def aadjust_after_completion(
@@ -186,10 +192,10 @@ class CreditManager:
 
     # --- Helpers privados. ---
 
-    def _resolve_cost(self, agent_id: str, model: str) -> int:
-        # DeepSeek V4 Pro = 1 punto. Si en el futuro se introducen modelos
-        # con coste distinto, cambiar aquí.
-        return 1
+    def _resolve_cost(self, agent_id: str, model: str, is_board: bool = False) -> int:
+        # Chat normal (1 agente) = 1 crédito. Board meeting = 5 créditos (~5× cómputo).
+        # Si en el futuro se introducen modelos con coste distinto, cambiar aquí.
+        return BOARD_MEETING_COST if is_board else 1
 
     def _charge_extra(self, ctx: ChargeContext) -> bool:
         """

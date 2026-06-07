@@ -3,7 +3,10 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from datetime import datetime
 
-ALLOWED_MODELS = {"deepseek-chat", "deepseek-r1", "gpt-4o", "gpt-4o-mini"}
+from app.core.llm_models import DEEPSEEK_REASONING, normalize_model, ALLOWED_AGENT_MODELS
+
+# Backward-compat: algunos módulos importan ALLOWED_MODELS desde aquí.
+ALLOWED_MODELS = ALLOWED_AGENT_MODELS
 
 
 class AgentIdentity(BaseModel):
@@ -15,16 +18,15 @@ class AgentIdentity(BaseModel):
 
 
 class BrainConfig(BaseModel):
-    model: str = "deepseek-chat"
+    model: str = DEEPSEEK_REASONING
     temperature: float = Field(0.3, ge=0.0, le=2.0)
     system_prompt: str = Field(..., min_length=10, max_length=10000)
 
     @field_validator('model')
     @classmethod
     def validate_model(cls, v):
-        if v not in ALLOWED_MODELS:
-            raise ValueError(f"Modelo debe ser uno de: {ALLOWED_MODELS}")
-        return v
+        # Normaliza nombres legacy/inválidos a un model ID de DeepSeek válido.
+        return normalize_model(v)
 
 
 class CustomAgentCreate(BaseModel):

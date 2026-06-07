@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { BillingPage } from '../../src/pages/BillingPage';
 import { useBillingStore } from '../../src/store/useBillingStore';
+
+// BillingPage usa <Link> en su header → necesita un Router en el árbol.
+const renderPage = () => render(<MemoryRouter><BillingPage /></MemoryRouter>);
 
 // Mock firebase/auth to prevent dynamic import from failing
 vi.mock('firebase/auth', () => ({
@@ -33,7 +37,7 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
     it('shows loading skeleton when isLoading and not loaded (BF-002)', () => {
         useBillingStore.setState({ isLoading: true, loaded: false });
 
-        render(<BillingPage />);
+        renderPage();
 
         // The page should NOT show plan information while loading
         expect(screen.queryByText('Facturación y Planes')).not.toBeInTheDocument();
@@ -48,7 +52,7 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
             loaded: false,
         });
 
-        render(<BillingPage />);
+        renderPage();
 
         expect(screen.getByText('Error al cargar la información de facturación')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /reintentar/i })).toBeInTheDocument();
@@ -63,7 +67,7 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
             refresh: mockRefresh,
         });
 
-        render(<BillingPage />);
+        renderPage();
 
         screen.getByRole('button', { name: /reintentar/i }).click();
         expect(mockRefresh).toHaveBeenCalled();
@@ -78,7 +82,7 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
             pro_messages_balance: 5,
         });
 
-        render(<BillingPage />);
+        renderPage();
 
         expect(screen.getByText(/Pagos no disponibles/i)).toBeInTheDocument();
         // Subscription buttons should be hidden
@@ -96,15 +100,14 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
             stripe_configured: true,
         });
 
-        render(<BillingPage />);
+        renderPage();
 
         expect(screen.getByText('Facturación y Planes')).toBeInTheDocument();
         expect(screen.getByText('starter')).toBeInTheDocument();
         expect(screen.getByText('100')).toBeInTheDocument();
     });
 
-    it('shows alert on checkout failure (BF-004)', async () => {
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    it('shows inline error on checkout failure (BF-004)', async () => {
         global.fetch = vi.fn().mockResolvedValue({
             ok: false,
             status: 500,
@@ -118,19 +121,15 @@ describe('BillingPage - Loading / Error / Stripe States (Task 2.3)', () => {
             plan_id: 'free',
         });
 
-        render(<BillingPage />);
+        renderPage();
 
         // Click the "Suscribirse" button on the Starter plan
         const subscribeButtons = screen.getAllByText('Suscribirse');
         subscribeButtons[0].click();
 
-        // Wait for fetch to reject and alert to be called
+        // En vez de un alert(), ahora se muestra un mensaje de error inline.
         await vi.waitFor(() => {
-            expect(alertSpy).toHaveBeenCalledWith(
-                expect.stringContaining('Error al procesar el pago')
-            );
+            expect(screen.getByText(/Internal Server Error|No se pudo iniciar el pago/i)).toBeInTheDocument();
         });
-
-        alertSpy.mockRestore();
     });
 });

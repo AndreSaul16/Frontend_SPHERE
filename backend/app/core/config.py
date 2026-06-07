@@ -88,11 +88,16 @@ class Settings(BaseSettings):
 
     @property
     def plan_messages_map(self) -> dict[str, int]:
-        """Mapeo plan_id -> mensajes mensuales que otorga el plan."""
+        """Mapeo plan_id -> créditos mensuales que otorga el plan.
+
+        Modelo de créditos ponderados: 1 chat (1 agente) = 1 crédito;
+        1 board meeting = 5 créditos. Free = 50 créditos (≈30-50 chats o ~10
+        board meetings) para enganchar sin disparar costes (≤$0.30/usuario/mes).
+        """
         return {
-            "free": 5,
-            "starter": 1000,
-            "premium": 2000,
+            "free": 50,
+            "starter": 600,
+            "premium": 1500,
         }
 
     @property

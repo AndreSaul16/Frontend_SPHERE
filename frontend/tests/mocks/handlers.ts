@@ -37,6 +37,11 @@ export const handlers = [
         });
     }),
 
+    // Mock para plantillas de agentes (lo consume AgentCreationWizard al abrirse)
+    http.get('http://localhost:8000/api/v1/agents/templates', () => {
+        return HttpResponse.json([]);
+    }),
+
     // Mock para crear sesión (Esquema Evolucionado)
     http.post('http://localhost:8000/api/v1/sessions/', () => {
         return HttpResponse.json({

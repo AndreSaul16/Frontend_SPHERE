@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { CreditCard, Zap, Check, Sparkles, ArrowLeft, Loader2, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useBillingStore } from '../store/useBillingStore';
 import { authHeaders } from '../services/api';
 
@@ -10,22 +12,33 @@ const PREMIUM_TOPUPS: Array<{ plan_id: string; label: string; price: string }> =
     { plan_id: 'topup_premium_10k', label: '10.000 msg', price: '€74.99' },
 ];
 
+/** Extrae un mensaje de error legible de una respuesta HTTP fallida. */
+async function readErrorMessage(response: Response, fallback: string): Promise<string> {
+    try {
+        const text = await response.text();
+        try {
+            const json = JSON.parse(text);
+            return json?.detail?.message || json?.detail || json?.message || fallback;
+        } catch {
+            return text || fallback;
+        }
+    } catch {
+        return fallback;
+    }
+}
+
 /** Skeleton para el estado de carga del panel de facturación */
 const BillingSkeleton: React.FC = () => (
-    <div data-testid="billing-loading" className="p-8 text-white w-full max-w-5xl mx-auto animate-pulse">
-        <div className="h-9 bg-slate-700/50 rounded-lg w-64 mb-8" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
-                <div className="h-6 bg-slate-700/50 rounded w-40" />
-                <div className="h-10 bg-slate-700/50 rounded w-24" />
-                <div className="h-4 bg-slate-700/50 rounded w-32" />
-            </div>
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
-                <div className="h-6 bg-slate-700/50 rounded w-48" />
-                <div className="h-8 bg-slate-700/50 rounded w-full" />
-                <div className="h-8 bg-slate-700/50 rounded w-full" />
-                <div className="h-8 bg-slate-700/50 rounded w-full" />
-            </div>
+    <div data-testid="billing-loading" className="p-6 sm:p-8 w-full max-w-5xl mx-auto animate-pulse">
+        <div className="h-9 bg-surface-highlight/50 rounded-lg w-64 mb-8" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            {[0, 1].map((i) => (
+                <div key={i} className="glass-panel p-6 rounded-2xl border border-surface-highlight space-y-4">
+                    <div className="h-6 bg-surface-highlight/50 rounded w-40" />
+                    <div className="h-10 bg-surface-highlight/50 rounded w-24" />
+                    <div className="h-4 bg-surface-highlight/50 rounded w-32" />
+                </div>
+            ))}
         </div>
     </div>
 );
@@ -45,6 +58,10 @@ export const BillingPage: React.FC = () => {
         refresh,
     } = useBillingStore();
 
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+    const [portalLoading, setPortalLoading] = useState(false);
+
     useEffect(() => {
         refresh();
         // Si volvemos de Stripe (success=true), refrescamos varias veces
@@ -57,6 +74,9 @@ export const BillingPage: React.FC = () => {
     }, [refresh]);
 
     const handleCheckout = async (planId: string) => {
+        if (pendingPlan) return;
+        setActionError(null);
+        setPendingPlan(planId);
         try {
             const headers = await authHeaders();
             const response = await fetch(`${API_URL}/billing/checkout`, {
@@ -65,20 +85,28 @@ export const BillingPage: React.FC = () => {
                 body: JSON.stringify({ plan_id: planId }),
             });
             if (!response.ok) {
-                const text = await response.text();
-                console.error('Checkout error', response.status, text);
-                alert('Error al procesar el pago. Intenta de nuevo en unos minutos.');
+                const msg = await readErrorMessage(response, 'No se pudo iniciar el pago. Inténtalo de nuevo.');
+                setActionError(msg);
                 return;
             }
             const data = await response.json();
-            if (data.url) window.location.href = data.url;
-        } catch (error) {
-            console.error('Checkout error:', error);
-            alert('Error al procesar el pago. Intenta de nuevo en unos minutos.');
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                setActionError('Respuesta inesperada del servidor de pagos.');
+            }
+        } catch (err) {
+            console.error('Checkout error:', err);
+            setActionError('Error de conexión al procesar el pago.');
+        } finally {
+            setPendingPlan(null);
         }
     };
 
     const handlePortal = async () => {
+        if (portalLoading) return;
+        setActionError(null);
+        setPortalLoading(true);
         try {
             const headers = await authHeaders();
             const response = await fetch(`${API_URL}/billing/portal`, {
@@ -86,13 +114,17 @@ export const BillingPage: React.FC = () => {
                 headers,
             });
             if (!response.ok) {
-                console.error('Portal error', response.status);
+                const msg = await readErrorMessage(response, 'No se pudo abrir la gestión de suscripción.');
+                setActionError(msg);
                 return;
             }
             const data = await response.json();
             if (data.url) window.location.href = data.url;
-        } catch (error) {
-            console.error('Portal error:', error);
+        } catch (err) {
+            console.error('Portal error:', err);
+            setActionError('Error de conexión al abrir el portal de suscripción.');
+        } finally {
+            setPortalLoading(false);
         }
     };
 
@@ -106,14 +138,14 @@ export const BillingPage: React.FC = () => {
     // Error state: mostrar error con botón de reintento
     if (error) {
         return (
-            <div className="p-8 text-white w-full max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh] gap-6">
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center max-w-md">
+            <div className="p-8 w-full max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[50vh] gap-6">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-8 text-center max-w-md">
                     <div className="text-4xl mb-4">⚠️</div>
                     <h2 className="text-xl font-bold text-red-400 mb-2">Error de conexión</h2>
-                    <p className="text-slate-300 mb-6">{error}</p>
+                    <p className="text-text-secondary mb-6">{error}</p>
                     <button
                         onClick={refresh}
-                        className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors font-medium"
+                        className="px-6 py-3 bg-electric-cyan/10 text-electric-cyan border border-electric-cyan/30 hover:bg-electric-cyan hover:text-midnight rounded-xl transition-all font-medium"
                     >
                         Reintentar
                     </button>
@@ -123,160 +155,200 @@ export const BillingPage: React.FC = () => {
     }
 
     return (
-        <div className="p-8 text-white w-full max-w-5xl mx-auto">
-            <h1 className="text-3xl font-bold mb-8">Facturación y Planes</h1>
+        <div className="flex flex-col h-full bg-midnight/40 overflow-y-auto">
+            {/* Header */}
+            <div className="h-14 sm:h-16 pl-14 lg:pl-6 pr-3 sm:pr-6 border-b border-surface flex items-center gap-3 bg-midnight/90 backdrop-blur-md sticky top-0 z-10">
+                <Link to="/" className="p-2 hover:bg-surface rounded-full transition-colors text-text-secondary hover:text-text-primary">
+                    <ArrowLeft className="h-5 w-5" />
+                </Link>
+                <h1 className="text-base sm:text-xl font-bold text-text-primary flex items-center gap-2">
+                    <CreditCard className="h-5 w-5 text-electric-cyan" />
+                    Facturación y Planes
+                </h1>
+            </div>
 
-            {/* Stripe no configurado: aviso */}
-            {!stripe_configured && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-8 text-center">
-                    <p className="text-amber-400 font-medium">
-                        ⚠️ Pagos no disponibles — el sistema de pagos no está configurado en este momento.
-                    </p>
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h2 className="text-xl font-semibold mb-4 text-indigo-400">Tu Plan Actual</h2>
-                    <p className="text-4xl font-bold capitalize mb-2">{plan_id}</p>
-                    <p className="text-sm text-slate-400 mb-2">Estado: <span className="capitalize">{status}</span></p>
-                    {current_period_end && (
-                        <p className="text-slate-400 mb-1">
-                            {cancel_at_period_end ? 'Acceso hasta' : 'Renueva el'}: {new Date(current_period_end).toLocaleDateString()}
+            <div className="flex-1 p-4 sm:p-8 w-full max-w-5xl mx-auto">
+                {/* Aviso: Stripe no configurado */}
+                {!stripe_configured && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-8 flex items-center gap-3">
+                        <span className="text-2xl">⚠️</span>
+                        <p className="text-amber-400 text-sm font-medium">
+                            Pagos no disponibles temporalmente. El sistema de pagos no está configurado en este momento.
                         </p>
-                    )}
-                    {plan_id !== 'free' && (
-                        <button
-                            onClick={handlePortal}
-                            className="mt-4 w-full py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors font-medium"
-                        >
-                            Gestionar Suscripción
-                        </button>
-                    )}
-                </div>
-
-                <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-                    <h2 className="text-xl font-semibold mb-4 text-emerald-400">Balance de Mensajes Pro</h2>
-                    <div className="flex flex-col gap-2 mb-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-300">Mensajes del plan:</span>
-                            <span className="text-2xl font-bold">{pro_messages_balance}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-slate-300">Mensajes top-up:</span>
-                            <span className="text-2xl font-bold text-emerald-400">{topup_messages_balance}</span>
-                        </div>
-                        <div className="border-t border-slate-700 pt-2 flex justify-between items-center">
-                            <span className="text-slate-300">Total disponible:</span>
-                            <span className="text-2xl font-bold">{totalBalance}</span>
-                        </div>
                     </div>
-                </div>
-            </div>
+                )}
 
-            {/* Si Stripe no está configurado, ocultar secciones de pago */}
-            {stripe_configured && <>
-                    <h2 className="text-2xl font-bold mb-6">Planes</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 flex flex-col">
-                    <h3 className="text-lg font-bold mb-2">Free</h3>
-                    <p className="text-3xl font-bold mb-4">€0<span className="text-sm text-slate-400 font-normal">/mes</span></p>
-                    <ul className="text-slate-300 space-y-2 mb-8 flex-1">
-                        <li>5 Mensajes Pro</li>
-                        <li>20 MB RAG</li>
-                        <li>Sin agentes custom</li>
-                    </ul>
-                    <button
-                        disabled
-                        className="w-full py-2 bg-slate-700/50 text-slate-400 rounded-lg cursor-not-allowed"
-                    >
-                        {plan_id === 'free' ? 'Plan Actual' : 'Tier base'}
-                    </button>
-                </div>
+                {/* Error de acción (checkout/portal) */}
+                {actionError && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 mb-8 flex items-center justify-between gap-3">
+                        <p className="text-red-400 text-sm">{actionError}</p>
+                        <button onClick={() => setActionError(null)} className="text-red-400/60 hover:text-red-400 text-sm">✕</button>
+                    </div>
+                )}
 
-                <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700 flex flex-col">
-                    <h3 className="text-lg font-bold mb-2">Starter</h3>
-                    <p className="text-3xl font-bold mb-4">€9.99<span className="text-sm text-slate-400 font-normal">/mes</span></p>
-                    <ul className="text-slate-300 space-y-2 mb-8 flex-1">
-                        <li>1.000 Mensajes Pro</li>
-                        <li>100 MB RAG</li>
-                        <li>3 Agentes Custom</li>
-                    </ul>
-                    <button
-                        onClick={() => handleCheckout('starter')}
-                        disabled={plan_id === 'starter'}
-                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium"
-                    >
-                        {plan_id === 'starter' ? 'Plan Actual' : 'Suscribirse'}
-                    </button>
-                </div>
-
-                <div className="bg-slate-800 p-6 rounded-xl border border-indigo-500 flex flex-col relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-indigo-500 text-xs font-bold px-3 py-1 rounded-bl-lg">RECOMENDADO</div>
-                    <h3 className="text-lg font-bold mb-2">Premium</h3>
-                    <p className="text-3xl font-bold mb-4">€19.99<span className="text-sm text-slate-400 font-normal">/mes</span></p>
-                    <ul className="text-slate-300 space-y-2 mb-8 flex-1">
-                        <li>2.000 Mensajes Pro</li>
-                        <li>1 GB RAG</li>
-                        <li>Agentes Custom Ilimitados</li>
-                        <li>API Access</li>
-                    </ul>
-                    <button
-                        onClick={() => handleCheckout('premium')}
-                        disabled={plan_id === 'premium'}
-                        className="w-full py-2 bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors font-medium"
-                    >
-                        {plan_id === 'premium' ? 'Plan Actual' : 'Suscribirse'}
-                    </button>
-                </div>
-            </div>
-
-            <h2 className="text-2xl font-bold mb-6">Packs adicionales (top-ups)</h2>
-            <p className="text-sm text-slate-400 mb-6">Mensajes extra que no caducan mientras tu cuenta esté activa.</p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
-                    <h3 className="text-lg font-bold mb-1">Free</h3>
-                    <p className="text-xs text-slate-500 mb-3">Disponible en cualquier plan</p>
-                    <button
-                        onClick={() => handleCheckout('topup_free')}
-                        className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm flex justify-between items-center"
-                    >
-                        <span>100 msg</span><span className="font-bold">€4.99</span>
-                    </button>
-                </div>
-
-                <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700">
-                    <h3 className="text-lg font-bold mb-1">Starter</h3>
-                    <p className="text-xs text-slate-500 mb-3">Requiere plan Starter o Premium</p>
-                    <button
-                        onClick={() => handleCheckout('topup_starter')}
-                        disabled={plan_id === 'free'}
-                        className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm flex justify-between items-center"
-                    >
-                        <span>700 msg</span><span className="font-bold">€5.99</span>
-                    </button>
-                </div>
-
-                <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/40">
-                    <h3 className="text-lg font-bold mb-1">Premium</h3>
-                    <p className="text-xs text-slate-500 mb-3">Requiere plan Premium</p>
-                    <div className="space-y-2">
-                        {PREMIUM_TOPUPS.map((t) => (
+                {/* Resumen: Plan actual + Balance */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+                    <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Sparkles className="h-4 w-4 text-luxury-purple" />
+                            <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Tu Plan Actual</h2>
+                        </div>
+                        <p className="text-4xl font-bold capitalize mb-2 text-text-primary">{plan_id}</p>
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className={`h-2 w-2 rounded-full ${status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                            <p className="text-sm text-text-secondary capitalize">{status}</p>
+                        </div>
+                        {current_period_end && (
+                            <p className="text-text-secondary text-sm mt-1">
+                                {cancel_at_period_end ? 'Acceso hasta' : 'Renueva el'}: {new Date(current_period_end).toLocaleDateString()}
+                            </p>
+                        )}
+                        {plan_id !== 'free' && (
                             <button
-                                key={t.plan_id}
-                                onClick={() => handleCheckout(t.plan_id)}
-                                disabled={plan_id !== 'premium'}
-                                className="w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm flex justify-between items-center"
+                                onClick={handlePortal}
+                                disabled={portalLoading}
+                                className="mt-4 w-full py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 rounded-xl transition-colors font-medium text-text-primary text-sm flex items-center justify-center gap-2 disabled:opacity-60"
                             >
-                                <span>{t.label}</span><span className="font-bold">{t.price}</span>
+                                {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                                Gestionar Suscripción
                             </button>
-                        ))}
+                        )}
+                    </div>
+
+                    <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Zap className="h-4 w-4 text-electric-cyan" />
+                            <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Balance de Mensajes</h2>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <div className="flex justify-between items-baseline">
+                                <span className="text-text-secondary text-sm">Mensajes del plan</span>
+                                <span className="text-2xl font-bold text-text-primary">{pro_messages_balance}</span>
+                            </div>
+                            <div className="flex justify-between items-baseline">
+                                <span className="text-text-secondary text-sm">Mensajes top-up</span>
+                                <span className="text-2xl font-bold text-electric-cyan">{topup_messages_balance}</span>
+                            </div>
+                            <div className="border-t border-surface-highlight pt-3 flex justify-between items-baseline">
+                                <span className="text-text-primary font-medium">Total disponible</span>
+                                <span className="text-3xl font-bold text-text-primary">{totalBalance}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                {/* Planes y top-ups: solo si Stripe está configurado */}
+                {stripe_configured && (
+                    <>
+                        <h2 className="text-lg font-bold mb-1 text-text-primary">Planes</h2>
+                        <p className="text-xs text-text-secondary mb-6">
+                            1 chat con un agente = 1 crédito · 1 reunión de Consejo (board meeting) = 5 créditos.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
+                            {/* Free */}
+                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight flex flex-col">
+                                <h3 className="text-lg font-bold mb-2 text-text-primary">Free</h3>
+                                <p className="text-3xl font-bold mb-4 text-text-primary">€0<span className="text-sm text-text-secondary font-normal">/mes</span></p>
+                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 50 créditos/mes</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> ≈ 10 reuniones de Consejo</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 20 MB RAG</li>
+                                    <li className="flex items-center gap-2 opacity-50">Sin agentes custom</li>
+                                </ul>
+                                <button disabled className="w-full py-2.5 bg-surface-highlight/40 text-text-secondary rounded-xl cursor-not-allowed text-sm">
+                                    {plan_id === 'free' ? 'Plan Actual' : 'Tier base'}
+                                </button>
+                            </div>
+
+                            {/* Starter */}
+                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight flex flex-col">
+                                <h3 className="text-lg font-bold mb-2 text-text-primary">Starter</h3>
+                                <p className="text-3xl font-bold mb-4 text-text-primary">€9.99<span className="text-sm text-text-secondary font-normal">/mes</span></p>
+                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 600 créditos/mes</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 100 MB RAG</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 3 Agentes Custom</li>
+                                </ul>
+                                <button
+                                    onClick={() => handleCheckout('starter')}
+                                    disabled={plan_id === 'starter' || pendingPlan === 'starter'}
+                                    className="w-full py-2.5 bg-electric-cyan/10 text-electric-cyan border border-electric-cyan/30 hover:bg-electric-cyan hover:text-midnight disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all font-medium text-sm flex items-center justify-center gap-2"
+                                >
+                                    {pendingPlan === 'starter' && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    {plan_id === 'starter' ? 'Plan Actual' : 'Suscribirse'}
+                                </button>
+                            </div>
+
+                            {/* Premium */}
+                            <div className="glass-panel p-6 rounded-2xl border border-luxury-purple/50 flex flex-col relative overflow-hidden">
+                                <div className="absolute top-0 right-0 bg-luxury-purple text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-wide">RECOMENDADO</div>
+                                <h3 className="text-lg font-bold mb-2 text-text-primary">Premium</h3>
+                                <p className="text-3xl font-bold mb-4 text-text-primary">€19.99<span className="text-sm text-text-secondary font-normal">/mes</span></p>
+                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> 1.500 créditos/mes</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> 1 GB RAG</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> Agentes Custom Ilimitados</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> API Access</li>
+                                </ul>
+                                <button
+                                    onClick={() => handleCheckout('premium')}
+                                    disabled={plan_id === 'premium' || pendingPlan === 'premium'}
+                                    className="w-full py-2.5 bg-luxury-purple text-white hover:bg-luxury-purple/80 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all font-medium text-sm flex items-center justify-center gap-2"
+                                >
+                                    {pendingPlan === 'premium' && <Loader2 className="h-4 w-4 animate-spin" />}
+                                    {plan_id === 'premium' ? 'Plan Actual' : 'Suscribirse'}
+                                </button>
+                            </div>
+                        </div>
+
+                        <h2 className="text-lg font-bold mb-2 text-text-primary">Packs adicionales (top-ups)</h2>
+                        <p className="text-sm text-text-secondary mb-6">Mensajes extra que no caducan mientras tu cuenta esté activa.</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
+                                <h3 className="text-base font-bold mb-1 text-text-primary">Free</h3>
+                                <p className="text-xs text-text-secondary mb-3">Disponible en cualquier plan</p>
+                                <button
+                                    onClick={() => handleCheckout('topup_free')}
+                                    disabled={pendingPlan === 'topup_free'}
+                                    className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
+                                >
+                                    <span>100 msg</span><span className="font-bold">€4.99</span>
+                                </button>
+                            </div>
+
+                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
+                                <h3 className="text-base font-bold mb-1 text-text-primary">Starter</h3>
+                                <p className="text-xs text-text-secondary mb-3">Requiere plan Starter o Premium</p>
+                                <button
+                                    onClick={() => handleCheckout('topup_starter')}
+                                    disabled={plan_id === 'free' || pendingPlan === 'topup_starter'}
+                                    className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
+                                >
+                                    <span>700 msg</span><span className="font-bold">€5.99</span>
+                                </button>
+                            </div>
+
+                            <div className="glass-panel p-6 rounded-2xl border border-luxury-purple/40">
+                                <h3 className="text-base font-bold mb-1 text-text-primary">Premium</h3>
+                                <p className="text-xs text-text-secondary mb-3">Requiere plan Premium</p>
+                                <div className="space-y-2">
+                                    {PREMIUM_TOPUPS.map((t) => (
+                                        <button
+                                            key={t.plan_id}
+                                            onClick={() => handleCheckout(t.plan_id)}
+                                            disabled={plan_id !== 'premium' || pendingPlan === t.plan_id}
+                                            className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
+                                        >
+                                            <span>{t.label}</span><span className="font-bold">{t.price}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
-            </>
-            }
         </div>
     );
 };

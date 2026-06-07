@@ -169,7 +169,7 @@ export function AgentOverridesSettings() {
                 <input
                   type="text"
                   className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-electric-cyan/50"
-                  placeholder="deepseek-chat"
+                  placeholder="deepseek-v4-pro"
                   value={ov?.model_override || ""}
                   onChange={(e) =>
                     handleChange(role.id, { model_override: e.target.value || null })

@@ -40,6 +40,12 @@ export function ChatPanel() {
     const [pinnedMessages, setPinnedMessages] = useState<string[]>([]);
     const [ratings, setRatings] = useState<Record<string, 'up' | 'down'>>({});
 
+    // Attachment (upload to custom agent's knowledge base) state
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
+    const CORE_AGENT_IDS = ['CEO', 'CTO', 'CFO', 'CMO', 'system', 'group-chat'];
+    const isCustomAgent = !!selectedAgentId && !CORE_AGENT_IDS.includes(selectedAgentId);
+
     const isTyping = currentSessionId ? streamingSessionIds.includes(currentSessionId) : false;
     const activeAgent = agents.find(a => a.id === selectedAgentId);
     const currentSession = sessions.find(s => s.session_id === currentSessionId);
@@ -79,6 +85,28 @@ export function ChatPanel() {
         if (searchQuery && !msg.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         return true;
     });
+
+    // Attachment handlers: subir un documento a la KB del agente custom activo.
+    const handleAttachClick = () => {
+        if (!isCustomAgent || isTyping) return;
+        fileInputRef.current?.click();
+    };
+
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        e.target.value = ''; // permitir re-subir el mismo archivo
+        if (!file || !selectedAgentId) return;
+        setUploadState('uploading');
+        try {
+            await chatService.uploadAgentDocument(selectedAgentId, file);
+            setUploadState('done');
+            setTimeout(() => setUploadState('idle'), 2500);
+        } catch (err) {
+            console.error('Upload error:', err);
+            setUploadState('error');
+            setTimeout(() => setUploadState('idle'), 3000);
+        }
+    };
 
     // Handlers
     const handlePin = useCallback(async (messageId: string) => {
@@ -423,11 +451,37 @@ export function ChatPanel() {
                             !isTyping && "focus-within:border-luxury-purple/40 focus-within:shadow-[0_0_30px_rgba(157,133,255,0.15)] shadow-2xl"
                         )}
                     >
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.txt,.md,.docx,.csv,.json"
+                            onChange={handleFileSelected}
+                        />
                         <button
-                            disabled={isTyping}
-                            className="p-3.5 text-gray-500 hover:text-white transition-all disabled:opacity-30 active-scale"
+                            onClick={handleAttachClick}
+                            disabled={isTyping || !isCustomAgent || uploadState === 'uploading'}
+                            title={
+                                !isCustomAgent
+                                    ? "Adjuntar documentos disponible para agentes personalizados"
+                                    : uploadState === 'uploading'
+                                    ? "Subiendo documento..."
+                                    : uploadState === 'done'
+                                    ? "Documento añadido a la base de conocimiento"
+                                    : uploadState === 'error'
+                                    ? "Error al subir — inténtalo de nuevo"
+                                    : "Adjuntar documento a la base de conocimiento del agente"
+                            }
+                            className={cn(
+                                "p-3.5 transition-all disabled:opacity-30 active-scale",
+                                uploadState === 'done'
+                                    ? "text-emerald-400"
+                                    : uploadState === 'error'
+                                    ? "text-red-400"
+                                    : "text-gray-500 hover:text-white"
+                            )}
                         >
-                            <Paperclip className="h-5 w-5" />
+                            <Paperclip className={cn("h-5 w-5", uploadState === 'uploading' && "animate-pulse")} />
                         </button>
 
                         <textarea

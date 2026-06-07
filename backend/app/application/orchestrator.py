@@ -28,21 +28,23 @@ env_path = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # --- CONFIG DEEPSEEK ---
+from app.core.llm_models import DEEPSEEK_REASONING, DEEPSEEK_FAST, normalize_model, pricing_for
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-# Modelo Rápido (Router)
+# Modelo Rápido (Router) — clasificación interna, no necesita reasoning.
 llm_router = ChatOpenAI(
-    model="deepseek-chat",
+    model=DEEPSEEK_FAST,
     openai_api_key=DEEPSEEK_API_KEY,
     openai_api_base=DEEPSEEK_BASE_URL,
     temperature=0,
     streaming=True,  # Habilitar streaming de tokens
 )
 
-# Modelo Inteligente (Agente Experto)
+# Modelo Inteligente (Agente Experto) — reasoning.
 llm_expert = ChatOpenAI(
-    model="deepseek-chat",
+    model=DEEPSEEK_REASONING,
     openai_api_key=DEEPSEEK_API_KEY,
     openai_api_base=DEEPSEEK_BASE_URL,
     temperature=0.3,
@@ -65,6 +67,7 @@ class AgentState(TypedDict):
     board_mode: bool  # True si estamos en modo board meeting
     board_iteration: int  # Iteración actual (0, 1, 2...)
     board_max_iterations: int  # Máximo de iteraciones (1 o 2)
+    board_iterations_pref: Optional[int]  # Preferencia explícita del usuario (1/2); None = auto
     board_agents_done: list[
         str
     ]  # Lista de agentes que ya respondieron en esta iteración
@@ -266,7 +269,7 @@ async def router_node(state: AgentState):
                     "next_agent": agent["identity"]["name"],
                     "system_prompt": brain["system_prompt"],
                     "model_config": {
-                        "model": brain.get("model", "deepseek-chat"),
+                        "model": normalize_model(brain.get("model")),
                         "temperature": brain.get("temperature", 0.3),
                     },
                 }
@@ -327,7 +330,7 @@ async def agent_node(state: AgentState):
         cm = CreditManager(db.get_sync_client()[app_settings.DB_NAME])
         try:
             # Async wrapper: ejecuta sync pymongo en threadpool sin bloquear el event loop.
-            charge_ctx = await cm.areserve_and_charge(user_id, effective_role, "deepseek-v4-pro")
+            charge_ctx = await cm.areserve_and_charge(user_id, effective_role, DEEPSEEK_REASONING)
         except InsufficientCreditsError:
             logger.info(f"402 Insufficient credits for user {user_id}")
             raise billing_error(
@@ -386,9 +389,11 @@ async def agent_node(state: AgentState):
             HumanMessage(content=query),
         ]
 
-    # 7. Construir LLM con la config resuelta (modelo + temperatura del override)
+    # 7. Construir LLM con la config resuelta (modelo + temperatura del override).
+    # normalize_model garantiza un model ID de DeepSeek válido aunque el agente
+    # tenga guardado un nombre legacy/inválido (deepseek-chat, deepseek-r1, ...).
     llm = ChatOpenAI(
-        model=resolved.model,
+        model=normalize_model(resolved.model),
         openai_api_key=DEEPSEEK_API_KEY,
         openai_api_base=DEEPSEEK_BASE_URL,
         temperature=resolved.temperature,
@@ -419,8 +424,9 @@ async def agent_node(state: AgentState):
         tokens_in, tokens_out = _extract_token_breakdown(response)
         total_tokens = tokens_in + tokens_out
         if total_tokens > 0:
-            # DeepSeek V4 Pro: ~$0.27/1M input, ~$1.10/1M output (precio aprox).
-            cost_actual = (tokens_in * 0.27 + tokens_out * 1.10) / 1_000_000
+            # Precio real del modelo usado (verificado en docs DeepSeek, jun 2026).
+            price = pricing_for(normalize_model(resolved.model))
+            cost_actual = (tokens_in * price["input"] + tokens_out * price["output"]) / 1_000_000
             try:
                 await cm.aadjust_after_completion(charge_ctx, tokens_in, tokens_out, cost_actual)
             except Exception as e:
@@ -584,11 +590,16 @@ async def board_classifier_node(state: AgentState):
     from app.application.board_classifier import classify_board_message
 
     query = state["query"]
-    classification = await classify_board_message(query)
 
-    max_iterations = 2 if classification == "complex" else 1
-
-    logger.info(f"Board meeting: {classification} → {max_iterations} iteraciones")
+    # Preferencia explícita del usuario (1 o 2) tiene prioridad sobre el classifier.
+    user_pref = state.get("board_iterations_pref")
+    if isinstance(user_pref, int) and user_pref >= 1:
+        max_iterations = min(user_pref, 2)
+        logger.info(f"Board meeting: usando preferencia del usuario → {max_iterations} iteraciones")
+    else:
+        classification = await classify_board_message(query)
+        max_iterations = 2 if classification == "complex" else 1
+        logger.info(f"Board meeting: {classification} → {max_iterations} iteraciones (auto)")
 
     return {
         "board_mode": True,

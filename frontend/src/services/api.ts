@@ -485,6 +485,14 @@ async function req<T = any>(
     return response.json();
 }
 
+export interface StorageUsage {
+    plan_id: string;
+    used_bytes: number;
+    quota_bytes: number;
+    file_count: number;
+    percent_used: number;
+}
+
 export const profileService = {
     getProfile: () => req<UserProfile>("/me"),
     updateProfile: (updates: Partial<UserProfile>) =>
@@ -492,6 +500,7 @@ export const profileService = {
     completeOnboarding: () =>
         req<UserProfile>("/me/onboarding/complete", { method: "POST" }),
     getUsage: () => req<UserProfile["usage"]>("/me/usage"),
+    getStorage: () => req<StorageUsage>("/me/storage"),
 };
 
 export const integrationsService = {

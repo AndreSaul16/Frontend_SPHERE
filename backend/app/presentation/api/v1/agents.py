@@ -13,11 +13,9 @@ from app.core.auth import get_current_user
 from app.core.tenant import require_owner
 from app.core.logger import api_logger as logger
 from app.core.plan_limits import get_plan_id, get_max_custom_agents
+from app.core.llm_models import DEEPSEEK_REASONING, normalize_model
 
 router = APIRouter()
-
-# --- Constantes ---
-ALLOWED_MODELS = {"deepseek-chat", "deepseek-r1", "gpt-4o", "gpt-4o-mini"}
 
 
 # --- Schemas ---
@@ -31,16 +29,16 @@ class AgentIdentity(BaseModel):
 
 
 class BrainConfig(BaseModel):
-    model: str = "deepseek-chat"
+    model: str = DEEPSEEK_REASONING
     temperature: float = Field(0.3, ge=0.0, le=2.0)
     system_prompt: str = Field(..., min_length=10, max_length=10000)
 
     @field_validator('model')
     @classmethod
     def validate_model(cls, v):
-        if v not in ALLOWED_MODELS:
-            raise ValueError(f"Modelo debe ser uno de: {ALLOWED_MODELS}")
-        return v
+        # Normaliza cualquier nombre legacy/inválido (deepseek-chat, deepseek-r1,
+        # gpt-4o, ...) a un model ID de DeepSeek válido y actual.
+        return normalize_model(v)
 
 
 class CustomAgentCreate(BaseModel):

@@ -6,6 +6,7 @@ from typing import Optional
 from app.infrastructure.database import get_custom_agents_collection, get_user_agent_overrides_collection
 from app.application.orchestrator import DEFAULT_CORE_PROMPTS, CORE_ROLES
 from app.core.user_context import build_user_context_block
+from app.core.llm_models import DEEPSEEK_REASONING, normalize_model
 from app.core.logger import api_logger as logger
 
 
@@ -15,7 +16,7 @@ class ResolvedAgent:
         self,
         system_prompt: str,
         temperature: float = 0.3,
-        model: str = "deepseek-chat",
+        model: str = DEEPSEEK_REASONING,
     ):
         self.system_prompt = system_prompt
         self.temperature = temperature
@@ -45,7 +46,7 @@ async def resolve_agent_config(
     if agent_role in CORE_ROLES:
         base_prompt = DEFAULT_CORE_PROMPTS.get(agent_role, DEFAULT_CORE_PROMPTS["system"])
         base_temperature = 0.3
-        base_model = "deepseek-chat"
+        base_model = DEEPSEEK_REASONING
     else:
         # Custom agent
         agents_col = get_custom_agents_collection()
@@ -54,11 +55,11 @@ async def resolve_agent_config(
             brain = agent.get("brain_config", {})
             base_prompt = brain.get("system_prompt", DEFAULT_CORE_PROMPTS["system"])
             base_temperature = brain.get("temperature", 0.3)
-            base_model = brain.get("model", "deepseek-chat")
+            base_model = normalize_model(brain.get("model"))
         else:
             base_prompt = DEFAULT_CORE_PROMPTS["system"]
             base_temperature = 0.3
-            base_model = "deepseek-chat"
+            base_model = DEEPSEEK_REASONING
 
     # Aplicar overrides del usuario
     final_prompt = base_prompt

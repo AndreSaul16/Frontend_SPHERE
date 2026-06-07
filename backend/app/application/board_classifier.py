@@ -15,12 +15,14 @@ from app.core.logger import checkpoint_logger as logger
 env_path = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=env_path)
 
+from app.core.llm_models import DEEPSEEK_FAST
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-# Modelo rápido para clasificación
+# Modelo rápido para clasificación (no necesita reasoning)
 classifier_llm = ChatOpenAI(
-    model="deepseek-chat",
+    model=DEEPSEEK_FAST,
     openai_api_key=DEEPSEEK_API_KEY,
     openai_api_base=DEEPSEEK_BASE_URL,
     temperature=0,

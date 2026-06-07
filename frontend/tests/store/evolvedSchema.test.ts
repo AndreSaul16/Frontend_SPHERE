@@ -73,11 +73,15 @@ describe('Evolved Schema Store Tests', () => {
         const sessionId = await useChatStore.getState().createNewSession('CEO');
 
         expect(sessionId).toBe('session-456');
+        // createNewSession now passes a single payload object (user_id is derived
+        // from the JWT on the backend, so it is no longer sent from the client).
         expect(chatService.createSession).toHaveBeenCalledWith(
             expect.objectContaining({
                 title: 'CEO',
+                base_agent_id: 'CEO',
                 visual_config: expect.objectContaining({ name: 'CEO', color: '#ffffff' }),
-                user_id: 'default_user'
+                type: 'direct',
+                members: ['CEO']
             })
         );
     });

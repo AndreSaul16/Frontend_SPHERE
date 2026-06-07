@@ -105,6 +105,42 @@ async def get_my_usage(user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/me/storage")
+async def get_my_storage(user: dict = Depends(get_current_user)):
+    """Devuelve el uso real de almacenamiento de documentos (GridFS) del usuario,
+    la cuota de su plan y el número de archivos. Multi-tenant: solo cuenta los
+    archivos cuyo metadata.user_id coincide con el usuario autenticado.
+    """
+    from app.infrastructure.database import get_gridfs_bucket
+    from app.core.plan_limits import get_plan_id, get_rag_quota_bytes
+
+    user_id = user["firebase_uid"]
+    bucket = get_gridfs_bucket()
+
+    used_bytes = 0
+    file_count = 0
+    try:
+        async for f in bucket.find({"metadata.user_id": user_id}):
+            meta = f.metadata or {}
+            used_bytes += int(meta.get("file_size_bytes", getattr(f, "length", 0)) or 0)
+            file_count += 1
+    except Exception as e:
+        logger.warning(f"No se pudo calcular uso de GridFS para {user_id}: {e}")
+        # Fallback al contador mantenido en el doc de usuario.
+        used_bytes = int((user.get("limits") or {}).get("rag_storage_bytes_used", 0) or 0)
+
+    plan_id = get_plan_id(user)
+    quota_bytes = get_rag_quota_bytes(plan_id)
+
+    return {
+        "plan_id": plan_id,
+        "used_bytes": used_bytes,
+        "quota_bytes": quota_bytes,
+        "file_count": file_count,
+        "percent_used": round(min(100.0, (used_bytes / quota_bytes) * 100), 1) if quota_bytes else 0.0,
+    }
+
+
 # --- Agent Overrides ---
 
 

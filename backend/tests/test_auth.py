@@ -10,7 +10,8 @@ from httpx import AsyncClient, ASGITransport
 @pytest.mark.asyncio
 async def test_no_auth_returns_401(async_client):
     """Un request sin Authorization header devuelve 401."""
-    resp = await async_client.post("/api/v1/chat/", json={"query": "hola"})
+    # El endpoint legacy /chat se eliminó; el endpoint de chat actual es /stream.
+    resp = await async_client.post("/api/v1/stream/", json={"query": "hola", "session_id": "s1"})
     assert resp.status_code == 401
 
 
@@ -20,7 +21,7 @@ async def test_invalid_token_returns_401(async_client):
     from fastapi import HTTPException
     with patch("app.core.auth._verify_token", side_effect=HTTPException(status_code=401, detail="Token inválido")):
         async_client.headers["Authorization"] = "Bearer invalid_token"
-        resp = await async_client.post("/api/v1/chat/", json={"query": "hola"})
+        resp = await async_client.post("/api/v1/stream/", json={"query": "hola", "session_id": "s1"})
         assert resp.status_code == 401
 
 
@@ -118,11 +119,11 @@ class TestEnsureWallet:
 
         assert update_filter == {"firebase_uid": "user_empty_wallet"}
         assert "$set" in update_operation
-        # El wallet reparado debe tener pro_messages_balance = 5 (plan free)
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
+        # El wallet reparado debe tener pro_messages_balance = 50 (plan free)
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
         # El resultado debe incluir el wallet reparado
         assert "wallet" in result
-        assert result["wallet"]["pro_messages_balance"] == 5
+        assert result["wallet"]["pro_messages_balance"] == 50
 
     @pytest.mark.asyncio
     async def test_ensure_wallet_with_none_wallet_reinitializes(self):
@@ -145,8 +146,8 @@ class TestEnsureWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         update_operation = call_args[0][1]
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
-        assert result["wallet"]["pro_messages_balance"] == 5
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
+        assert result["wallet"]["pro_messages_balance"] == 50
 
     @pytest.mark.asyncio
     async def test_ensure_wallet_with_valid_wallet_passes_through(self):
@@ -196,8 +197,8 @@ class TestEnsureWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         update_operation = call_args[0][1]
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 5
-        assert result["wallet"]["pro_messages_balance"] == 5
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
+        assert result["wallet"]["pro_messages_balance"] == 50
         assert result["wallet"]["topup_messages_balance"] == 0
 
 
@@ -229,8 +230,8 @@ class TestRepairWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         assert call_args[0][0] == {"firebase_uid": "user_repair"}
-        assert call_args[0][1]["$set"]["wallet.pro_messages_balance"] == 5
-        assert result["wallet"]["pro_messages_balance"] == 5
+        assert call_args[0][1]["$set"]["wallet.pro_messages_balance"] == 50
+        assert result["wallet"]["pro_messages_balance"] == 50
 
     @pytest.mark.asyncio
     async def test_repair_wallet_preserves_valid_wallet(self):

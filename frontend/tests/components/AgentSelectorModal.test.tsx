@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AgentSelectorModal } from '../../src/components/modals/AgentSelectorModal';
@@ -48,7 +48,7 @@ describe('AgentSelectorModal - Comportamiento de UI', () => {
         expect(createSessionSpy).toHaveBeenCalledWith('cto-1');
     });
 
-    it('debe permitir cambiar a la vista de creación de agente', () => {
+    it('debe abrir el asistente de creación de agente', async () => {
         useChatStore.setState({ isAgentModalOpen: true });
 
         render(
@@ -59,7 +59,10 @@ describe('AgentSelectorModal - Comportamiento de UI', () => {
 
         fireEvent.click(screen.getByText('Crear Nuevo Agente'));
 
-        expect(screen.getByText('Crea tu propio experto')).toBeDefined();
-        expect(screen.getByPlaceholderText(/Ej: Especialista Legal/i)).toBeDefined();
+        // El botón abre el AgentCreationWizard (paso 0: "Elegir método").
+        // El wizard muestra su cabecera "Crear Agente" y la opción "Crear desde cero".
+        expect(await screen.findByRole('heading', { name: 'Crear Agente' })).toBeDefined();
+        expect(screen.getByText('Crear desde cero')).toBeDefined();
+        expect(screen.getByText(/o usa una plantilla/i)).toBeDefined();
     });
 });

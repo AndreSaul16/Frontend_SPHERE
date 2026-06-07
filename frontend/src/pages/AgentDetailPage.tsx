@@ -25,7 +25,7 @@ import { KnowledgeBasePanel } from "@/components/agents/KnowledgeBasePanel";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
-const ALLOWED_MODELS = ["deepseek-chat", "deepseek-r1", "gpt-4o", "gpt-4o-mini"] as const;
+const ALLOWED_MODELS = ["deepseek-v4-pro", "deepseek-v4-flash"] as const;
 type AllowedModel = (typeof ALLOWED_MODELS)[number];
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -233,7 +233,7 @@ export function AgentDetailPage() {
     const [color, setColor] = useState("#00F0C8");
     const [systemPrompt, setSystemPrompt] = useState("");
     const [temperature, setTemperature] = useState(0.7);
-    const [model, setModel] = useState<AllowedModel>("deepseek-chat");
+    const [model, setModel] = useState<AllowedModel>("deepseek-v4-pro");
     const [role, setRole] = useState("specialist");
 
     // ── Saving / Deleting ────────────────────────────────────────────────
@@ -278,7 +278,7 @@ export function AgentDetailPage() {
                 setModel(
                     ALLOWED_MODELS.includes(data.brain_config?.model as AllowedModel)
                         ? (data.brain_config.model as AllowedModel)
-                        : "deepseek-chat"
+                        : "deepseek-v4-pro"
                 );
 
                 setOriginalHash(
@@ -289,8 +289,8 @@ export function AgentDetailPage() {
                         systemPrompt: data.brain_config?.system_prompt ?? "",
                         temperature: data.brain_config?.temperature ?? 0.7,
                         model: ALLOWED_MODELS.includes(data.brain_config?.model as AllowedModel)
-                            ? data.brain_config.model
-                            : "deepseek-chat",
+                            ? (data.brain_config.model as AllowedModel)
+                            : "deepseek-v4-pro",
                     })
                 );
             } catch (err: any) {
@@ -729,13 +729,9 @@ export function AgentDetailPage() {
                                             <span className="truncate">{m}</span>
                                         </div>
                                         <p className="text-[10px] mt-1 opacity-50 ml-4">
-                                            {m === "deepseek-chat"
-                                                ? "Rápido y eficiente"
-                                                : m === "deepseek-r1"
-                                                ? "Razonamiento avanzado"
-                                                : m === "gpt-4o"
-                                                ? "OpenAI — máxima calidad"
-                                                : "OpenAI — rápido y económico"}
+                                            {m === "deepseek-v4-pro"
+                                                ? "Razonamiento máximo (recomendado)"
+                                                : "Rápido y económico"}
                                         </p>
                                     </button>
                                 ))}

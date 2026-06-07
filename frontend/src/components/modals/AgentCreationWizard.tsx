@@ -95,8 +95,8 @@ const PRESET_COLORS = [
 ];
 
 const MODEL_OPTIONS = [
-    { value: 'deepseek-chat', label: 'DeepSeek Chat', description: 'Rapido y versatil' },
-    { value: 'deepseek-r1', label: 'DeepSeek R1', description: 'Razonamiento avanzado' },
+    { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', description: 'Razonamiento máximo (recomendado)' },
+    { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', description: 'Rápido y económico' },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -175,7 +175,7 @@ export function AgentCreationWizard({ isOpen, onClose, onAgentCreated }: AgentCr
     const [systemPrompt, setSystemPrompt] = useState('');
     const [color, setColor] = useState(PRESET_COLORS[0]);
     const [temperature, setTemperature] = useState(0.7);
-    const [model, setModel] = useState('deepseek-chat');
+    const [model, setModel] = useState('deepseek-v4-pro');
 
     // Step 2: knowledge base
     const [files, setFiles] = useState<FileEntry[]>([]);
@@ -232,7 +232,7 @@ export function AgentCreationWizard({ isOpen, onClose, onAgentCreated }: AgentCr
                 setSystemPrompt('');
                 setColor(PRESET_COLORS[0]);
                 setTemperature(0.7);
-                setModel('deepseek-chat');
+                setModel('deepseek-v4-pro');
                 setFiles([]);
                 setIsSubmitting(false);
                 setSubmitError(null);

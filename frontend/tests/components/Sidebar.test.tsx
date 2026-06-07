@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { Sidebar } from '../../src/components/sidebar/Sidebar';
 import { useChatStore } from '../../src/store/useChatStore';
@@ -65,15 +65,17 @@ describe('Sidebar — Billing Link (Task 4.1)', () => {
     expect(billingLink).toBeDefined();
   });
 
-  it('billing link navigates to /billing on click', () => {
+  it('billing link points to /billing', () => {
     render(
       <MemoryRouter>
         <Sidebar />
       </MemoryRouter>
     );
-    const billingLink = screen.getByText('Facturación');
-    fireEvent.click(billingLink);
-    expect(mockNavigate).toHaveBeenCalledWith('/billing');
+    // The component uses a react-router <Link to="/billing"> (no navigate() call),
+    // so assert the resulting anchor's href instead of a navigate() invocation.
+    const anchor = screen.getByText('Facturación').closest('a');
+    expect(anchor).not.toBeNull();
+    expect(anchor).toHaveAttribute('href', '/billing');
   });
 
   it('billing link has a credit-card or receipt icon', () => {
@@ -129,7 +131,10 @@ describe('Sidebar — Dynamic User Info (Task 4.3)', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('john@example.com')).toBeDefined();
+    // When displayName is null the email is used both as the primary name
+    // (displayName || email) and as the secondary line, so it appears twice.
+    const matches = screen.getAllByText('john@example.com');
+    expect(matches.length).toBeGreaterThan(0);
   });
 
   it('shows initials in avatar when no photoURL', () => {

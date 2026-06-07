@@ -5,6 +5,8 @@ Templates predefinidos para creación guiada de agentes especializados.
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional
 
+from app.core.llm_models import DEEPSEEK_REASONING
+
 
 @dataclass
 class AgentTemplate:
@@ -41,7 +43,7 @@ COMPORTAMIENTO:
 - Estructura tus respuestas: Análisis → Riesgos → Recomendación → Próximos pasos.""",
         suggested_files=["Códigos legales aplicables", "Contratos modelo", "Políticas de compliance"],
         default_temperature=0.2,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["derecho", "contratos", "compliance", "regulación"]
     ),
 
@@ -65,7 +67,7 @@ COMPORTAMIENTO:
 - Disclaimer: "Soy una herramienta de apoyo, no sustituyo terapia profesional.""",
         suggested_files=["Manuales de técnicas CBT", "Protocolos de intervención", "Guías de bienestar"],
         default_temperature=0.4,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["psicología", "salud mental", "bienestar", "CBT"]
     ),
 
@@ -89,7 +91,7 @@ COMPORTAMIENTO:
 - Estructura: Contexto normativo → Análisis numérico → Recomendación → Riesgos fiscales.""",
         suggested_files=["Normativas fiscales", "Planes de cuentas", "Formatos de declaración"],
         default_temperature=0.1,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["contabilidad", "impuestos", "auditoría", "finanzas"]
     ),
 
@@ -113,7 +115,7 @@ COMPORTAMIENTO:
 - Estructura: Definición del problema → EDA sugerido → Modelo recomendado → Evaluación → Deployment.""",
         suggested_files=["Datasets de referencia", "Papers de investigación", "Documentación de APIs"],
         default_temperature=0.3,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["machine learning", "datos", "estadística", "Python"]
     ),
 
@@ -137,7 +139,7 @@ COMPORTAMIENTO:
 - Estructura: Brief → Concepto creativo → Copy (variantes) → Recomendación de A/B test.""",
         suggested_files=["Guías de marca", "Ejemplos de copy", "Personas de buyer"],
         default_temperature=0.8,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["copywriting", "branding", "contenido", "marketing"]
     ),
 
@@ -161,7 +163,7 @@ COMPORTAMIENTO:
 - Estructura: Diagnóstico → Marco legal → Opciones → Recomendación → Plan de acción.""",
         suggested_files=["Políticas internas", "Legislación laboral", "Manuales de onboarding"],
         default_temperature=0.4,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["recursos humanos", "talento", "cultura", "laboral"]
     ),
 
@@ -185,7 +187,7 @@ COMPORTAMIENTO:
 - Estructura: Situación → Análisis de oportunidad → Estrategia → Tácticas concretas → KPIs.""",
         suggested_files=["Playbooks de ventas", "Objeciones frecuentes", "Casos de éxito"],
         default_temperature=0.5,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["ventas", "negociación", "B2B", "pipeline"]
     ),
 
@@ -209,7 +211,7 @@ COMPORTAMIENTO:
 - Estructura: Pregunta guía → Exploración del tema → Metodología sugerida → Recursos → Próximos pasos.""",
         suggested_files=["Guías de estilo APA/IEEE", "Bases de datos académicas", "Metodologías de investigación"],
         default_temperature=0.3,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["educación", "investigación", "tesis", "academia"]
     ),
 
@@ -233,7 +235,7 @@ COMPORTAMIENTO:
 - Estructura: Estado actual → Riesgos → Priorización → Plan de acción → Timeline.""",
         suggested_files=["Templates de proyecto", "Frameworks ágiles", "Risk registers"],
         default_temperature=0.3,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["proyecto", "agile", "scrum", "delivery"]
     ),
 
@@ -258,7 +260,7 @@ COMPORTAMIENTO:
 - Estructura: Contexto médico → Posibles causas → Cuándo consultar → Medidas generales.""",
         suggested_files=["Guías clínicas", "Protocolos de atención", "Literatura médica"],
         default_temperature=0.2,
-        default_model="deepseek-chat",
+        default_model=DEEPSEEK_REASONING,
         tags=["medicina", "salud", "orientación", "evidencia"]
     ),
 ]

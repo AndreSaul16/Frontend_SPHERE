@@ -42,6 +42,26 @@ export function Sidebar() {
 
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
+
+    const handleShare = async (e: React.MouseEvent, sessionId: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = `${window.location.origin}/chat/${sessionId}`;
+        try {
+            await navigator.clipboard.writeText(url);
+        } catch {
+            // Fallback para navegadores sin clipboard API
+            const ta = document.createElement("textarea");
+            ta.value = url;
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); } catch { /* noop */ }
+            document.body.removeChild(ta);
+        }
+        setCopiedId(sessionId);
+        setTimeout(() => setCopiedId((id) => (id === sessionId ? null : id)), 1800);
+    };
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -209,11 +229,11 @@ export function Sidebar() {
                                                 ) : (
                                                     <>
                                                         <button
-                                                            onClick={(e) => { e.preventDefault(); /* Placeholder para compartir */ }}
+                                                            onClick={(e) => handleShare(e, session.session_id)}
                                                             className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:bg-surface-highlight rounded-lg transition-colors"
                                                         >
                                                             <Share2 className="h-3.5 w-3.5" />
-                                                            Compartir
+                                                            {copiedId === session.session_id ? "¡Enlace copiado!" : "Compartir"}
                                                         </button>
                                                         <div className="h-px bg-surface-highlight my-1 mx-1" />
                                                         <button

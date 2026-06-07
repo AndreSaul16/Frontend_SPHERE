@@ -20,6 +20,14 @@ async def create_checkout_session(
     req: CheckoutRequest,
     user: dict = Depends(get_current_user),
 ):
+    # Guard: si Stripe no está configurado, devolver 503 claro en vez de un 500 críptico.
+    if not settings.stripe_configured:
+        raise billing_error(
+            ErrorCode.BILLING_STRIPE_ERROR,
+            503,
+            "Los pagos no están disponibles en este momento. Inténtalo más tarde.",
+        )
+
     # Top-up tier validation: el plan_id solicitado debe corresponder al tier actual
     if req.plan_id.startswith("topup_") and not validate_topup_tier(user, req.plan_id):
         raise app_error(
@@ -47,6 +55,12 @@ async def create_checkout_session(
 
 @router.post("/portal")
 async def create_portal_session(user: dict = Depends(get_current_user)):
+    if not settings.stripe_configured:
+        raise billing_error(
+            ErrorCode.BILLING_STRIPE_ERROR,
+            503,
+            "La gestión de suscripción no está disponible en este momento.",
+        )
     user_id = user["firebase_uid"]
     # Leer fresco de Mongo: el customer_id puede haberse seteado vía webhook
     # entre el login y este request, por lo que el dict `user` puede estar desactualizado.

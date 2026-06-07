@@ -29,7 +29,8 @@ class TestAgentsEndpoint:
         data = response.json()
         assert "agent_id" in data
         assert data["identity"]["name"] == "Oberon Pytest"
-        assert data["brain_config"]["model"] == "deepseek-chat"
+        # 'deepseek-chat' (legacy/deprecado) se normaliza a 'deepseek-v4-pro'.
+        assert data["brain_config"]["model"] == "deepseek-v4-pro"
 
         # Guardar ID para otros tests
         pytest.test_agent_id = data["agent_id"]
@@ -50,7 +51,7 @@ class TestAgentsEndpoint:
 
         # Verificar defaults
         assert data["identity"]["role"] == "specialist"
-        assert data["brain_config"]["model"] == "deepseek-chat"
+        assert data["brain_config"]["model"] == "deepseek-v4-pro"
         assert data["is_public"] is False
 
     @pytest.mark.asyncio

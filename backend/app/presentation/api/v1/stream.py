@@ -44,6 +44,7 @@ async def generate_chat_events(
     user_id: str,
     target_role: Optional[str] = None,
     board_mode: bool = False,
+    board_iterations: Optional[int] = None,
     already_charged: bool = False,
     charge_ctx = None,
     credit_manager = None,
@@ -82,9 +83,12 @@ async def generate_chat_events(
             "user_id": user_id,
             "already_charged": already_charged,
             # Board meeting defaults
-            "board_mode": False,
+            "board_mode": board_mode,
             "board_iteration": 0,
-            "board_max_iterations": 1,
+            "board_max_iterations": board_iterations or 1,
+            # Preferencia explícita del usuario (1 o 2). Si está, el classifier la
+            # respeta en vez de auto-decidir. None → el classifier decide.
+            "board_iterations_pref": board_iterations,
             "board_agents_done": [],
         }
 
@@ -379,52 +383,13 @@ async def chat_stream_endpoint(
                 },
             )
 
-        # Pre-check de créditos ANTES de abrir SSE.
-        wallet = user.get("wallet") or {}
-        total_balance = (
-            wallet.get("pro_messages_balance", 0)
-            + wallet.get("topup_messages_balance", 0)
-        )
-        if total_balance <= 0:
-            raise HTTPException(
-                status_code=402,
-                detail={
-                    "error": "insufficient_credits",
-                    "message": "Has agotado tus mensajes. Sube de plan o compra un top-up.",
-                },
-            )
-
-        # Cobrar 1 crédito AHORA (antes del grafo, una sola vez por POST).
-        charge_ctx = None
-        credit_manager = None
-        try:
-            from app.application.credit_manager import CreditManager
-            from app.core.config import settings as app_settings
-            from app.infrastructure.database import db
-
-            credit_manager = CreditManager(db.get_sync_client()[app_settings.DB_NAME])
-            charge_ctx = await credit_manager.areserve_and_charge(
-                user_id, "stream", "deepseek-v4-pro"
-            )
-            already_charged = True
-        except Exception as e:
-            # Si es InsufficientCreditsError, ya lanzamos 402 arriba; pero por si acaso
-            from app.application.credit_manager import InsufficientCreditsError
-            if isinstance(e, InsufficientCreditsError):
-                raise HTTPException(
-                    status_code=402,
-                    detail={
-                        "error": "insufficient_credits",
-                        "message": "Has agotado tus mensajes.",
-                    },
-                )
-            logger.error(f"Error inesperado al cobrar crédito: {e}")
-            raise HTTPException(status_code=500, detail="Error interno al procesar créditos")
-
-        # Verificar que la sesión pertenece al usuario
+        # ── 1. Resolver sesión + target_role + board_mode ANTES de cobrar ──
+        # Cobramos el coste correcto (board meeting = 5 créditos) y evitamos cobrar
+        # si la sesión no es del usuario o el agente custom fue eliminado (422).
         from app.infrastructure.database import (
             get_sessions_collection,
             get_custom_agents_collection,
+            get_users_collection,
         )
 
         sessions_collection = get_sessions_collection()
@@ -433,58 +398,113 @@ async def chat_stream_endpoint(
         )
         require_owner(session_doc, user_id, "Sesión")
 
-        # Distributed lock: previene concurrencia en el mismo thread
+        final_target_role = request.target_role
+        board_mode = False
+        board_iterations = None
+
+        if not final_target_role and session_doc:
+            session_type = session_doc.get("type", "direct")
+            if session_type == "group":
+                final_target_role = None
+                logger.debug("Sesión GROUP detectada: router clasificará la consulta")
+
+                # Board meeting habilitado para este usuario?
+                users_col = get_users_collection()
+                user_doc = await users_col.find_one(
+                    {"firebase_uid": user_id},
+                    {"board_meeting_enabled": 1, "board_iterations": 1},
+                )
+                if user_doc and user_doc.get("board_meeting_enabled", False):
+                    board_mode = True
+                    # Honrar la preferencia explícita del usuario (1 o 2); si no está
+                    # seteada, el classifier decide automáticamente.
+                    pref = user_doc.get("board_iterations")
+                    if isinstance(pref, int) and pref >= 1:
+                        board_iterations = min(pref, 2)
+                    logger.info(
+                        f"Board Meeting activado para user {user_id} "
+                        f"(iteraciones={board_iterations or 'auto'})"
+                    )
+            else:
+                agent_ref_type = session_doc.get("agent_ref_type", "core")
+                base_agent_id = session_doc.get("base_agent_id", "CEO")
+
+                if agent_ref_type == "custom":
+                    agents_col = get_custom_agents_collection()
+                    agent = await agents_col.find_one({"agent_id": base_agent_id})
+                    if not agent:
+                        raise HTTPException(
+                            status_code=422,
+                            detail="El agente asignado a esta sesión fue eliminado. Crea una nueva sesión.",
+                        )
+
+                final_target_role = base_agent_id
+                logger.debug(
+                    f"Sesión DIRECT ({agent_ref_type}): target_role={final_target_role}"
+                )
+
+        # ── 2. Pre-check + cobro del coste correcto (1 normal, 5 board meeting) ──
+        from app.application.credit_manager import (
+            CreditManager,
+            InsufficientCreditsError,
+            BOARD_MEETING_COST,
+        )
+        from app.core.config import settings as app_settings
+        from app.infrastructure.database import db
+
+        required = BOARD_MEETING_COST if board_mode else 1
+        wallet = user.get("wallet") or {}
+        total_balance = (
+            wallet.get("pro_messages_balance", 0)
+            + wallet.get("topup_messages_balance", 0)
+        )
+        if total_balance < required:
+            msg = (
+                f"Un board meeting cuesta {BOARD_MEETING_COST} mensajes y no te quedan "
+                "suficientes. Sube de plan o compra un top-up."
+                if board_mode
+                else "Has agotado tus mensajes. Sube de plan o compra un top-up."
+            )
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "insufficient_credits", "message": msg},
+            )
+
+        charge_ctx = None
+        credit_manager = None
+        try:
+            credit_manager = CreditManager(db.get_sync_client()[app_settings.DB_NAME])
+            charge_ctx = await credit_manager.areserve_and_charge(
+                user_id, "stream", "deepseek-v4-pro", is_board=board_mode
+            )
+            already_charged = True
+        except InsufficientCreditsError:
+            raise HTTPException(
+                status_code=402,
+                detail={
+                    "error": "insufficient_credits",
+                    "message": "Has agotado tus mensajes.",
+                },
+            )
+        except Exception as e:
+            logger.error(f"Error inesperado al cobrar crédito: {e}")
+            raise HTTPException(status_code=500, detail="Error interno al procesar créditos")
+
+        # ── 3. Distributed lock (previene concurrencia en el mismo thread) + stream ──
         lock = DistributedLock(
             f"checkpoint:{user_id}:{request.session_id}", ttl_seconds=60
         )
         acquired = await lock.acquire()
         if not acquired:
+            # No vamos a procesar este mensaje: reembolsar lo cobrado.
+            if credit_manager and charge_ctx:
+                await credit_manager.arefund(charge_ctx, reason="lock_not_acquired")
             raise HTTPException(
                 status_code=409,
                 detail="Tu mensaje anterior aún se está procesando. Espera un momento.",
             )
 
         try:
-            final_target_role = request.target_role
-            board_mode = False
-
-            if not final_target_role and session_doc:
-                session_type = session_doc.get("type", "direct")
-                if session_type == "group":
-                    final_target_role = None
-                    logger.debug(
-                        "Sesión GROUP detectada: router clasificará la consulta"
-                    )
-
-                    # Check if board meeting is enabled for this user
-                    from app.infrastructure.database import get_users_collection
-
-                    users_col = get_users_collection()
-                    user_doc = await users_col.find_one(
-                        {"firebase_uid": user_id},
-                        {"board_meeting_enabled": 1, "board_iterations": 1},
-                    )
-                    if user_doc and user_doc.get("board_meeting_enabled", False):
-                        board_mode = True
-                        logger.info(f"Board Meeting activado para user {user_id}")
-                else:
-                    agent_ref_type = session_doc.get("agent_ref_type", "core")
-                    base_agent_id = session_doc.get("base_agent_id", "CEO")
-
-                    if agent_ref_type == "custom":
-                        agents_col = get_custom_agents_collection()
-                        agent = await agents_col.find_one({"agent_id": base_agent_id})
-                        if not agent:
-                            raise HTTPException(
-                                status_code=422,
-                                detail="El agente asignado a esta sesión fue eliminado. Crea una nueva sesión.",
-                            )
-
-                    final_target_role = base_agent_id
-                    logger.debug(
-                        f"Sesión DIRECT ({agent_ref_type}): target_role={final_target_role}"
-                    )
-
             return StreamingResponse(
                 generate_chat_events(
                     request.query,
@@ -492,6 +512,7 @@ async def chat_stream_endpoint(
                     user_id,
                     final_target_role,
                     board_mode,
+                    board_iterations=board_iterations,
                     already_charged=already_charged,
                     charge_ctx=charge_ctx,
                     credit_manager=credit_manager,
@@ -505,8 +526,10 @@ async def chat_stream_endpoint(
                 },
             )
         except Exception as inner_e:
-            # Solo si falla ANTES de crear el StreamingResponse — liberar lock aquí
+            # Falla ANTES de crear el StreamingResponse: liberar lock y reembolsar.
             await lock.release()
+            if credit_manager and charge_ctx:
+                await credit_manager.arefund(charge_ctx, reason="stream_setup_failed")
             raise inner_e
 
     except HTTPException:
