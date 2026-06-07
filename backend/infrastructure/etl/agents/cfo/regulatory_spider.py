@@ -10,6 +10,7 @@ import sys
 import time
 import requests
 import io
+import certifi
 
 # Importar clase base
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -34,7 +35,7 @@ class RegulatorySpider(BaseTechSpider):
             return None
         
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=30, verify=certifi.where())
             response.raise_for_status()
             
             pdf = pdfplumber.open(io.BytesIO(response.content))
@@ -82,7 +83,7 @@ class AnnualReportsSpider(RegulatorySpider):
                 
                 # Guardar PDF raw
                 try:
-                    response = requests.get(report['url'], headers=self.headers, timeout=30, verify=False)
+                    response = requests.get(report['url'], headers=self.headers, timeout=30, verify=certifi.where())
                     response.raise_for_status()
                     
                     import re

@@ -1,22 +1,8 @@
 import React, { useEffect } from 'react';
 import { useBillingStore } from '../store/useBillingStore';
+import { authHeaders } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-
-async function authHeaders(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    try {
-        const { getAuth } = await import('firebase/auth');
-        const auth = getAuth();
-        const user = auth.currentUser;
-        if (user) {
-            headers['Authorization'] = `Bearer ${await user.getIdToken()}`;
-        }
-    } catch {
-        // sin auth
-    }
-    return headers;
-}
 
 const PREMIUM_TOPUPS: Array<{ plan_id: string; label: string; price: string }> = [
     { plan_id: 'topup_premium_1k', label: '1.000 msg', price: '€7.99' },

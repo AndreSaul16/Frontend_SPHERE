@@ -12,6 +12,7 @@ import sys
 import re
 import time
 from pathlib import Path
+import certifi
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import pymupdf4llm
@@ -313,7 +314,7 @@ def migrate_bronze_to_silver():
         client = MongoClient(
             MONGODB_URL,
             tls=True,
-            tlsAllowInvalidCertificates=True,
+            tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=30000
         )
         db = client[DB_NAME]

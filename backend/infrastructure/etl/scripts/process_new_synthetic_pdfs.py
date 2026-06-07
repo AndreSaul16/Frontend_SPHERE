@@ -13,6 +13,7 @@ import os
 import sys
 import re
 import time
+import certifi
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import pymupdf4llm
@@ -187,7 +188,7 @@ def process_new_synthetic_pdfs():
         client = MongoClient(
             MONGODB_URL,
             tls=True,
-            tlsAllowInvalidCertificates=True,
+            tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=30000
         )
         db = client[DB_NAME]

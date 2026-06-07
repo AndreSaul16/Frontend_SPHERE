@@ -8,6 +8,7 @@ Incluye documentos de investigación, modelos mentales y playbooks.
 import os
 import sys
 import time
+import certifi
 import requests
 import io
 
@@ -85,7 +86,7 @@ class MarketingFrameworkSpider(BaseTechSpider):
         
         try:
             print(f"   📥 Descargando PDF...")
-            response = requests.get(url, headers=self.headers, timeout=30, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=30, verify=certifi.where())
             response.raise_for_status()
             
             pdf_size_mb = len(response.content) / (1024 * 1024)
@@ -130,7 +131,7 @@ class MarketingFrameworkSpider(BaseTechSpider):
     def save_pdf_raw(self, url, title):
         """Guarda el PDF raw en disco (Bronze Layer)."""
         try:
-            response = requests.get(url, headers=self.headers, timeout=30, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=30, verify=certifi.where())
             response.raise_for_status()
             
             # Sanitizar nombre

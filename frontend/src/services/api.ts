@@ -23,7 +23,7 @@ async function getAuthToken(): Promise<string | null> {
 /**
  * Headers con Bearer token inyectado automáticamente.
  */
-async function authHeaders(): Promise<Record<string, string>> {
+export async function authHeaders(): Promise<Record<string, string>> {
     const headers: Record<string, string> = {
         "Content-Type": "application/json",
     };
@@ -251,6 +251,7 @@ export const chatService = {
         const response = await fetch(`${API_URL}/agents/`, {
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error fetching agents: ${response.status}`);
         return response.json();
     },
 
@@ -260,6 +261,7 @@ export const chatService = {
             headers: await authHeaders(),
             body: JSON.stringify(data)
         });
+        if (!response.ok) throw new Error(`Error creating agent: ${response.status}`);
         return response.json();
     },
 
@@ -274,10 +276,11 @@ export const chatService = {
     },
 
     async deleteCustomAgent(agentId: string): Promise<void> {
-        await fetch(`${API_URL}/agents/${agentId}`, {
+        const response = await fetch(`${API_URL}/agents/${agentId}`, {
             method: 'DELETE',
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error deleting agent: ${response.status}`);
     },
 
     // --- AGENT UPDATE ---
@@ -299,6 +302,7 @@ export const chatService = {
         const response = await fetch(url, {
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error fetching templates: ${response.status}`);
         return response.json();
     },
 
@@ -339,14 +343,16 @@ export const chatService = {
         const response = await fetch(`${API_URL}/agents/${agentId}/documents`, {
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error fetching documents: ${response.status}`);
         return response.json();
     },
 
     async deleteAgentDocument(agentId: string, fileId: string): Promise<void> {
-        await fetch(`${API_URL}/agents/${agentId}/documents/${fileId}`, {
+        const response = await fetch(`${API_URL}/agents/${agentId}/documents/${fileId}`, {
             method: 'DELETE',
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error deleting document: ${response.status}`);
     },
 
     // --- PINS ---

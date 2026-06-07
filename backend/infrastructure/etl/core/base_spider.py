@@ -41,15 +41,10 @@ class BaseTechSpider(ABC):
         
         # Conexión DB compartida
         try:
-            # ✅ SOLUCIÓN TEMPORAL para TLSV1_ALERT_INTERNAL_ERROR en Windows
-            # El problema es OCSP (Online Certificate Status Protocol) que falla en Windows
-            # Workaround: Deshabilitar validación SSL (⚠️ SOLO para desarrollo local)
-            # TODO: Para producción, configurar certificados correctamente en el sistema
-            
             self.client = MongoClient(
                 MONGODB_URL,
                 tls=True,
-                tlsAllowInvalidCertificates=True,    # ⚠️ Bypass SSL para desarrollo
+                tlsCAFile=certifi.where(),
                 serverSelectionTimeoutMS=30000,
                 connectTimeoutMS=30000,
                 socketTimeoutMS=30000
@@ -102,9 +97,7 @@ class BaseTechSpider(ABC):
         Retorna markdown con tablas incluidas.
         """
         try:
-            # ✅ Descargar con requests + headers realistas
-            # NOTA: verify=False temporal para entornos sin certificados configurados
-            response = requests.get(url, headers=self.headers, timeout=15, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=15, verify=certifi.where())
             response.raise_for_status()
             html_content = response.text
             
@@ -136,9 +129,9 @@ class BaseTechSpider(ABC):
             filepath: Ruta completa del archivo guardado
         """
         try:
-            response = requests.get(url, headers=self.headers, timeout=15, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=15, verify=certifi.where())
             response.raise_for_status()
-            
+
             # Sanitizar nombre de archivo
             clean_title = re.sub(r'[^\w\s-]', '', title).strip().lower()
             clean_title = re.sub(r'[-\s]+', '-', clean_title)[:50]

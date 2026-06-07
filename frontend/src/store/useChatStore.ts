@@ -327,7 +327,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 .map(m => m.agentId);
             const detectedAgentId = agentIds.length > 0 ? agentIds[0] : 'group-chat';
 
-            console.log('📦 [loadSession] Cache:', { sessionId, detectedAgentId, agentIds });
+            if (import.meta.env.DEV) console.log('📦 [loadSession] Cache:', { sessionId, detectedAgentId, agentIds });
             set({ currentSessionId: sessionId, selectedAgentId: detectedAgentId });
             return;
         }
@@ -421,7 +421,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     }
                 }
 
-                console.log('🌐 [loadSession] Servidor:', { sessionId, detectedAgentId, sessionBaseAgent: session?.base_agent_id });
+                if (import.meta.env.DEV) console.log('🌐 [loadSession] Servidor:', { sessionId, detectedAgentId, sessionBaseAgent: session?.base_agent_id });
 
                 return {
                     currentSessionId: sessionId,
@@ -461,7 +461,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     selectAgent: (agentId) => {
         set({ selectedAgentId: agentId });
-        console.log(`🔌 Canal seleccionado: ${agentId}`);
+        if (import.meta.env.DEV) console.log(`🔌 Canal seleccionado: ${agentId}`);
     },
 
     toggleArtifactPanel: () => set((state) => ({ isArtifactPanelOpen: !state.isArtifactPanelOpen })),
@@ -676,7 +676,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         } catch (error: any) {
             // No reportar error si fue una cancelación intencional (Stop Generation)
             if (error?.name === 'AbortError') {
-                console.log('🛑 Generación detenida por el usuario');
+                if (import.meta.env.DEV) console.log('🛑 Generación detenida por el usuario');
                 return;
             }
             const sphereError = new NetworkError('Error en el flujo de transmisión', 'send_message', error);
@@ -693,7 +693,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const { abortController, currentSessionId } = get();
         if (abortController) {
             abortController.abort();
-            console.log('🛑 Stop Generation activado');
+            if (import.meta.env.DEV) console.log('🛑 Stop Generation activado');
         }
         set((state) => ({
             abortController: null,
@@ -731,9 +731,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 )
             }));
 
-            console.log('✅ [updateSessionMetadata] Success:', updatedSession);
+            if (import.meta.env.DEV) console.log('✅ [updateSessionMetadata] Success:', updatedSession);
         } catch (error) {
-            console.error('❌ [updateSessionMetadata] Error:', error);
+            if (import.meta.env.DEV) console.error('❌ [updateSessionMetadata] Error:', error);
             throw error;
         }
     },
@@ -757,9 +757,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 } : {}),
             });
 
-            console.log('🗑️ [deleteSession] Sesión eliminada:', sessionId);
+            if (import.meta.env.DEV) console.log('🗑️ [deleteSession] Sesión eliminada:', sessionId);
         } catch (error) {
-            console.error('❌ [deleteSession] Error:', error);
+            if (import.meta.env.DEV) console.error('❌ [deleteSession] Error:', error);
             throw error;
         }
     },

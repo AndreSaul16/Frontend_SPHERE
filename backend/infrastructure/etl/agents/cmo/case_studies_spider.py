@@ -8,6 +8,7 @@ Spiders para casos de estudio de growth hacking y marketing.
 import os
 import sys
 import time
+import certifi
 from bs4 import BeautifulSoup
 import requests
 
@@ -109,7 +110,7 @@ class CaseStudySpider(BaseTechSpider):
             import pdfplumber
             import io
             
-            response = requests.get(url, headers=self.headers, timeout=30, verify=False)
+            response = requests.get(url, headers=self.headers, timeout=30, verify=certifi.where())
             response.raise_for_status()
             
             pdf = pdfplumber.open(io.BytesIO(response.content))
@@ -178,7 +179,7 @@ class CaseStudySpider(BaseTechSpider):
                 if is_pdf:
                     # Guardar PDF
                     try:
-                        response = requests.get(case['url'], headers=self.headers, timeout=30, verify=False)
+                        response = requests.get(case['url'], headers=self.headers, timeout=30, verify=certifi.where())
                         response.raise_for_status()
                         
                         import re

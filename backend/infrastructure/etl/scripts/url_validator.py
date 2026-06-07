@@ -5,7 +5,10 @@ Valida todas las URLs de un corpus antes de ejecutar los spiders.
 Verifica códigos HTTP, acceso a contenido, SSL, y genera reportes.
 """
 
+import warnings
+import certifi
 import requests
+import urllib3
 import time
 import re
 from urllib.parse import urlparse
@@ -65,21 +68,23 @@ class URLValidator:
                 # Intentar con verificación SSL
                 try:
                     response = requests.get(
-                        url, 
-                        headers=self.headers, 
+                        url,
+                        headers=self.headers,
                         timeout=self.timeout,
                         allow_redirects=True,
-                        verify=True
+                        verify=certifi.where()
                     )
                 except requests.exceptions.SSLError:
-                    # Intentar sin verificación SSL
-                    response = requests.get(
-                        url, 
-                        headers=self.headers, 
-                        timeout=self.timeout,
-                        allow_redirects=True,
-                        verify=False
-                    )
+                    # Fallback sin verificación SSL para detectar URLs accesibles con cert inválido
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore", urllib3.exceptions.InsecureRequestWarning)
+                        response = requests.get(
+                            url,
+                            headers=self.headers,
+                            timeout=self.timeout,
+                            allow_redirects=True,
+                            verify=False
+                        )
                     result['ssl_valid'] = False
                 
                 result['code'] = response.status_code

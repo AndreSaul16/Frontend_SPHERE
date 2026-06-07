@@ -306,11 +306,26 @@ async def _auto_provision_user(firebase_claims: dict) -> dict:
             upsert=True,
         )
     except Exception as e:
-        # DuplicateKeyError en email="" — el usuario ya existe, solo actualizar login
         if "duplicate key" in str(e).lower():
-            logger.debug(
-                f"Usuario ya existe (email duplicado), actualizando login: {uid}"
-            )
+            if email:
+                # Email collision: el mismo email ya está registrado con otro firebase_uid
+                # (ej: Google + Email/Password). Retornar el usuario existente por email
+                # en lugar de crear un fantasma en memoria.
+                existing = await users_col.find_one({"email": email})
+                if existing:
+                    logger.warning(
+                        f"Email '{email}' ya registrado bajo UID {existing['firebase_uid']}. "
+                        f"Login con UID {uid} redirigido al usuario existente."
+                    )
+                    await users_col.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": {"last_login_at": now}},
+                    )
+                    existing = await _ensure_wallet(existing["firebase_uid"], existing)
+                    existing.pop("_id", None)
+                    return existing
+            # DuplicateKey sin email (ej: email="") — actualizar last_login por firebase_uid
+            logger.debug(f"DuplicateKey sin email, actualizando login: {uid}")
             await users_col.update_one(
                 {"firebase_uid": uid},
                 {"$set": {"last_login_at": now}},

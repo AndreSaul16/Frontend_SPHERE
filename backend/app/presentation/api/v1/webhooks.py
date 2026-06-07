@@ -152,8 +152,11 @@ async def stripe_webhook(request: Request):
                     try:
                         sub = stripe.Subscription.retrieve(subscription_id)
                         period_end = _ts_to_dt(sub.get("current_period_end"))
-                    except Exception:
-                        pass
+                    except Exception as sub_err:
+                        logger.error(
+                            f"No se pudo obtener current_period_end para suscripción "
+                            f"{subscription_id}: {sub_err}. El campo quedará como None."
+                        )
                     users_col.update_one(
                         {"_id": user["_id"]},
                         {"$set": {

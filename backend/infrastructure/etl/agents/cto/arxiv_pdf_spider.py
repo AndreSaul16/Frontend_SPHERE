@@ -9,6 +9,7 @@ import sys
 import time
 import requests
 import re
+import certifi
 from urllib.parse import urlparse
 
 # Importar clase base
@@ -51,7 +52,7 @@ class ArxivPDFSpider(BaseTechSpider):
             print(f"      📥 Descargando PDF: {title[:50]}...")
             
             # Descargar PDF
-            response = requests.get(pdf_url, headers=self.headers, timeout=30, verify=False)
+            response = requests.get(pdf_url, headers=self.headers, timeout=30, verify=certifi.where())
             response.raise_for_status()
             
             # Validar que es un PDF

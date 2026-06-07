@@ -1,11 +1,36 @@
-import { useRef } from "react";
-import { User, Shield, Bell, ArrowLeft, LogOut, Save, Camera } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useRef, useState, useEffect } from "react";
+import { User, Shield, Bell, ArrowLeft, LogOut, Save, Camera, Loader2 } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useUserAvatar, saveUserAvatar } from "@/hooks/useUserAvatar";
+import { profileService } from "@/services/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function ProfilePage() {
     const avatarUrl = useUserAvatar();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const navigate = useNavigate();
+    const { user: firebaseUser, signOut } = useAuth();
+
+    const [displayName, setDisplayName] = useState("");
+    const [userEmail, setUserEmail] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+
+    useEffect(() => {
+        profileService.getProfile()
+            .then((profile) => {
+                setDisplayName(profile.display_name || "");
+                setUserEmail(profile.email || "");
+            })
+            .catch(() => {
+                // Fallback a Firebase Auth si el backend falla
+                if (firebaseUser) {
+                    setDisplayName(firebaseUser.displayName || "");
+                    setUserEmail(firebaseUser.email || "");
+                }
+            });
+    }, [firebaseUser]);
 
     const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -23,6 +48,35 @@ export function ProfilePage() {
         fileInputRef.current?.click();
     };
 
+    const handleSave = async () => {
+        if (isSaving) return;
+        setIsSaving(true);
+        setSaveStatus("idle");
+        try {
+            await profileService.updateProfile({ display_name: displayName });
+            setSaveStatus("success");
+            setTimeout(() => setSaveStatus("idle"), 2500);
+        } catch {
+            setSaveStatus("error");
+            setTimeout(() => setSaveStatus("idle"), 2500);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleLogout = async () => {
+        if (isLoggingOut) return;
+        setIsLoggingOut(true);
+        try {
+            await signOut();
+            navigate("/login");
+        } catch {
+            setIsLoggingOut(false);
+        }
+    };
+
+    const avatarInitial = displayName.trim().charAt(0).toUpperCase() || "?";
+
     return (
         <div className="flex flex-col h-full bg-midnight/40 relative overflow-hidden">
             {/* Background Living Effect */}
@@ -37,7 +91,7 @@ export function ProfilePage() {
                 />
             </div>
 
-            {/* Header - Added pl-14 for mobile hamburger menu space */}
+            {/* Header */}
             <div className="h-14 sm:h-16 pl-14 lg:pl-6 pr-3 sm:pr-6 border-b border-surface flex items-center justify-between bg-midnight/90 backdrop-blur-md sticky top-0 z-10">
                 <div className="flex items-center gap-3 sm:gap-4">
                     <Link to="/" className="p-2 hover:bg-surface rounded-full transition-colors text-text-secondary hover:text-text-primary">
@@ -45,9 +99,25 @@ export function ProfilePage() {
                     </Link>
                     <h1 className="text-base sm:text-xl font-bold text-text-primary">Mi Perfil</h1>
                 </div>
-                <button className="flex items-center gap-2 px-3 py-2 bg-electric-cyan/10 text-electric-cyan rounded-xl hover:bg-electric-cyan hover:text-midnight transition-all font-medium text-sm">
-                    <Save className="h-4 w-4" />
-                    <span className="hidden sm:inline">Guardar</span>
+                <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl transition-all font-medium text-sm ${
+                        saveStatus === "success"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : saveStatus === "error"
+                            ? "bg-red-500/10 text-red-400"
+                            : "bg-electric-cyan/10 text-electric-cyan hover:bg-electric-cyan hover:text-midnight"
+                    } disabled:opacity-60`}
+                >
+                    {isSaving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Save className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                        {saveStatus === "success" ? "Guardado" : saveStatus === "error" ? "Error" : "Guardar"}
+                    </span>
                 </button>
             </div>
 
@@ -77,7 +147,7 @@ export function ProfilePage() {
                                 {avatarUrl ? (
                                     <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
                                 ) : (
-                                    "S"
+                                    avatarInitial
                                 )}
                             </div>
                             <button
@@ -89,11 +159,10 @@ export function ProfilePage() {
                         </div>
 
                         <div className="space-y-1.5 sm:space-y-2">
-                            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary">Saúl</h2>
-                            <p className="text-text-secondary font-mono text-[10px] sm:text-xs md:text-sm tracking-widest uppercase">SPHERE Administrator</p>
+                            <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-text-primary">{displayName || "—"}</h2>
+                            <p className="text-text-secondary font-mono text-[10px] sm:text-xs md:text-sm tracking-widest uppercase">{userEmail}</p>
                             <div className="flex gap-2 justify-center pt-1 sm:pt-2 flex-wrap">
                                 <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-full text-[10px] sm:text-xs">Online</span>
-                                <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 bg-luxury-purple/10 text-luxury-purple border border-luxury-purple/20 rounded-full text-[10px] sm:text-xs">Nivel 4</span>
                             </div>
                         </div>
                     </section>
@@ -110,11 +179,21 @@ export function ProfilePage() {
                             <div className="space-y-4">
                                 <div>
                                     <label className="text-[10px] uppercase font-mono text-text-secondary ml-1">Nombre Público</label>
-                                    <input type="text" defaultValue="Saúl" className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-electric-cyan/50 transition-all mt-1" />
+                                    <input
+                                        type="text"
+                                        value={displayName}
+                                        onChange={(e) => setDisplayName(e.target.value)}
+                                        className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-electric-cyan/50 transition-all mt-1"
+                                    />
                                 </div>
                                 <div>
                                     <label className="text-[10px] uppercase font-mono text-text-secondary ml-1">Email de Acceso</label>
-                                    <input type="email" defaultValue="admin@sphere.ai" className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-electric-cyan/50 transition-all mt-1" />
+                                    <input
+                                        type="email"
+                                        value={userEmail}
+                                        readOnly
+                                        className="w-full bg-midnight/50 border border-surface-highlight rounded-xl px-4 py-2.5 text-sm focus:outline-none transition-all mt-1 opacity-60 cursor-not-allowed"
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -123,17 +202,16 @@ export function ProfilePage() {
                         <div className="p-6 rounded-2xl bg-surface/30 border border-surface-highlight hover:border-luxury-purple/30 transition-colors space-y-4">
                             <div className="flex items-center gap-3 text-text-primary font-semibold mb-4">
                                 <Shield className="h-5 w-5 text-luxury-purple" />
-                                <h3>Seguridad y Llaves</h3>
+                                <h3>Seguridad</h3>
                             </div>
                             <div className="space-y-3">
-                                <button className="w-full flex items-center justify-between p-3 bg-midnight/50 rounded-xl hover:bg-surface-highlight transition-colors group">
-                                    <span className="text-sm">Cambiar Protocolo de Acceso</span>
+                                <Link
+                                    to="/settings/profile"
+                                    className="w-full flex items-center justify-between p-3 bg-midnight/50 rounded-xl hover:bg-surface-highlight transition-colors group"
+                                >
+                                    <span className="text-sm">Configuración avanzada</span>
                                     <ArrowLeft className="h-4 w-4 rotate-180 text-text-secondary group-hover:translate-x-1 transition-transform" />
-                                </button>
-                                <button className="w-full flex items-center justify-between p-3 bg-midnight/50 rounded-xl hover:bg-surface-highlight transition-colors group">
-                                    <span className="text-sm">Generar Nueva API Key</span>
-                                    <ArrowLeft className="h-4 w-4 rotate-180 text-text-secondary group-hover:translate-x-1 transition-transform" />
-                                </button>
+                                </Link>
                             </div>
                         </div>
 
@@ -143,31 +221,28 @@ export function ProfilePage() {
                                 <Bell className="h-5 w-5 text-amber-500" />
                                 <h3>Preferencias de Sistema</h3>
                             </div>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm">Notificaciones de Agentes</span>
-                                    <div className="w-10 h-5 bg-electric-cyan/20 border border-electric-cyan/50 rounded-full relative">
-                                        <div className="absolute right-1 top-1 w-3 h-3 bg-electric-cyan rounded-full" />
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                    <span className="text-sm">Sonidos de Orquestación</span>
-                                    <div className="w-10 h-5 bg-surface-highlight border border-white/5 rounded-full relative">
-                                        <div className="absolute left-1 top-1 w-3 h-3 bg-text-secondary rounded-full" />
-                                    </div>
-                                </div>
-                            </div>
+                            <p className="text-xs text-text-secondary">
+                                Configura notificaciones, tema e idioma en{" "}
+                                <Link to="/settings/profile" className="text-electric-cyan hover:underline">
+                                    Ajustes → Perfil
+                                </Link>.
+                            </p>
                         </div>
 
-                        {/* Danger Zone */}
+                        {/* Logout */}
                         <div className="p-6 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-4">
                             <div className="flex items-center gap-3 text-red-500 font-semibold mb-4">
                                 <LogOut className="h-5 w-5" />
                                 <h3>Cerrar Sesión</h3>
                             </div>
                             <p className="text-xs text-text-secondary">Desconectar de SPHERE y limpiar caché de sesión local.</p>
-                            <button className="w-full py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm font-medium">
-                                Logout Protocol
+                            <button
+                                onClick={handleLogout}
+                                disabled={isLoggingOut}
+                                className="w-full py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl hover:bg-red-500 hover:text-white transition-all text-sm font-medium disabled:opacity-60 flex items-center justify-center gap-2"
+                            >
+                                {isLoggingOut ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                {isLoggingOut ? "Cerrando sesión..." : "Cerrar Sesión"}
                             </button>
                         </div>
 

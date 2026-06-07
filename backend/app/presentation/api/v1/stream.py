@@ -47,6 +47,7 @@ async def generate_chat_events(
     already_charged: bool = False,
     charge_ctx = None,
     credit_manager = None,
+    lock: Optional["DistributedLock"] = None,
 ):
     """Generador asíncrono con aislamiento multi-tenant.
 
@@ -308,6 +309,12 @@ async def generate_chat_events(
 
     except GeneratorExit:
         logger.info(f"🛑 Cliente desconectado (Stop Generation): {session_id}")
+        if already_charged and charge_ctx and credit_manager is not None:
+            try:
+                await credit_manager.arefund(charge_ctx, reason="client_disconnected")
+                logger.info(f"♻️ Crédito reembolsado por desconexión del cliente: {user_id}")
+            except Exception as refund_error:
+                logger.error(f"Error reembolsando crédito en desconexión: {refund_error}")
         return
     except Exception as e:
         # Refund on error: si ya cobramos el crédito, devolverlo
@@ -320,6 +327,9 @@ async def generate_chat_events(
         error = safe_error_response(e)
         yield f"data: {json.dumps({'type': 'error', 'message': error['message']})}\n\n"
         yield "data: [DONE]\n\n"
+    finally:
+        if lock is not None:
+            await lock.release()
 
 
 @router.post("/")
@@ -485,6 +495,7 @@ async def chat_stream_endpoint(
                     already_charged=already_charged,
                     charge_ctx=charge_ctx,
                     credit_manager=credit_manager,
+                    lock=lock,
                 ),
                 media_type="text/event-stream",
                 headers={
@@ -493,9 +504,10 @@ async def chat_stream_endpoint(
                     "X-Accel-Buffering": "no",
                 },
             )
-        finally:
-            # Liberar lock cuando el stream termina
+        except Exception as inner_e:
+            # Solo si falla ANTES de crear el StreamingResponse — liberar lock aquí
             await lock.release()
+            raise inner_e
 
     except HTTPException:
         raise

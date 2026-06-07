@@ -25,8 +25,22 @@ import { KnowledgeBasePanel } from "@/components/agents/KnowledgeBasePanel";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
-const ALLOWED_MODELS = ["deepseek-chat", "deepseek-r1"] as const;
+const ALLOWED_MODELS = ["deepseek-chat", "deepseek-r1", "gpt-4o", "gpt-4o-mini"] as const;
 type AllowedModel = (typeof ALLOWED_MODELS)[number];
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    try {
+        const { getAuth } = await import("firebase/auth");
+        const user = getAuth().currentUser;
+        if (user) {
+            headers["Authorization"] = `Bearer ${await user.getIdToken()}`;
+        }
+    } catch {
+        // sin auth — el backend rechazará con 401
+    }
+    return headers;
+}
 
 // ---------------------------------------------------------------------------
 // Types (API response shape)
@@ -36,6 +50,7 @@ interface AgentIdentityAPI {
     name: string;
     role: string;
     color: string;
+    description?: string;
     avatar_style?: string;
 }
 
@@ -144,7 +159,7 @@ function DeleteConfirmationModal({
                     </div>
                     <div>
                         <h3 className="text-lg font-bold text-text-primary">Eliminar Agente</h3>
-                        <p className="text-xs text-text-secondary mt-0.5">Esta accion no se puede deshacer</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Esta acción no se puede deshacer</p>
                     </div>
                 </div>
 
@@ -247,14 +262,15 @@ export function AgentDetailPage() {
             setIsLoading(true);
             setFetchError(null);
             try {
-                const res = await fetch(`${API_URL}/agents/${agentId}`);
+                const headers = await getAuthHeaders();
+                const res = await fetch(`${API_URL}/agents/${agentId}`, { headers });
                 if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
                 const data: AgentDetailAPI = await res.json();
 
                 if (cancelled) return;
 
                 setName(data.identity?.name ?? "");
-                setDescription(data.identity?.avatar_style ?? ""); // description stored in avatar_style or role context
+                setDescription(data.identity?.description ?? "");
                 setColor(data.identity?.color ?? "#00F0C8");
                 setRole(data.identity?.role ?? "specialist");
                 setSystemPrompt(data.brain_config?.system_prompt ?? "");
@@ -265,12 +281,10 @@ export function AgentDetailPage() {
                         : "deepseek-chat"
                 );
 
-                // Capture initial hash AFTER populating fields — defer 1 tick so state is settled
-                // We use the data directly instead of state for accurate hash
                 setOriginalHash(
                     JSON.stringify({
                         name: data.identity?.name ?? "",
-                        description: data.identity?.avatar_style ?? "",
+                        description: data.identity?.description ?? "",
                         color: data.identity?.color ?? "#00F0C8",
                         systemPrompt: data.brain_config?.system_prompt ?? "",
                         temperature: data.brain_config?.temperature ?? 0.7,
@@ -298,15 +312,16 @@ export function AgentDetailPage() {
 
         setIsSaving(true);
         try {
+            const headers = await getAuthHeaders();
             const res = await fetch(`${API_URL}/agents/${agentId}`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers,
                 body: JSON.stringify({
                     identity: {
                         name,
                         role,
                         color,
-                        avatar_style: description,
+                        description,
                     },
                     brain_config: {
                         model,
@@ -333,8 +348,10 @@ export function AgentDetailPage() {
 
         setIsDeleting(true);
         try {
+            const headers = await getAuthHeaders();
             const res = await fetch(`${API_URL}/agents/${agentId}`, {
                 method: "DELETE",
+                headers,
             });
             if (!res.ok) throw new Error(`Error ${res.status}`);
             pushToast("Agente eliminado", "success");
@@ -508,13 +525,13 @@ export function AgentDetailPage() {
                         {/* Description */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] text-text-secondary uppercase tracking-widest font-mono block ml-1 opacity-60">
-                                Descripcion
+                                Descripción
                             </label>
                             <textarea
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 rows={2}
-                                placeholder="Breve descripcion del proposito del agente..."
+                                placeholder="Breve descripcion del propósito del agente..."
                                 className="w-full bg-midnight/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-electric-cyan/50 focus:ring-1 focus:ring-electric-cyan/20 transition-all resize-none placeholder:text-text-secondary/30"
                             />
                         </div>
@@ -590,7 +607,7 @@ export function AgentDetailPage() {
                         <div className="flex items-center gap-2">
                             <Brain className="h-4 w-4 text-electric-cyan" />
                             <h2 className="text-text-secondary text-xs sm:text-sm uppercase tracking-widest font-mono">
-                                Configuracion Cerebral
+                                Configuración Cerebral
                             </h2>
                         </div>
 
@@ -713,8 +730,12 @@ export function AgentDetailPage() {
                                         </div>
                                         <p className="text-[10px] mt-1 opacity-50 ml-4">
                                             {m === "deepseek-chat"
-                                                ? "Rapido y eficiente"
-                                                : "Razonamiento avanzado"}
+                                                ? "Rápido y eficiente"
+                                                : m === "deepseek-r1"
+                                                ? "Razonamiento avanzado"
+                                                : m === "gpt-4o"
+                                                ? "OpenAI — máxima calidad"
+                                                : "OpenAI — rápido y económico"}
                                         </p>
                                     </button>
                                 ))}
@@ -759,7 +780,7 @@ export function AgentDetailPage() {
                         </div>
 
                         <p className="text-xs text-text-secondary/60 leading-relaxed">
-                            Eliminar este agente es una accion irreversible. Se perdera toda la configuracion,
+                            Eliminar este agente es una acción irreversible. Se perderá toda la configuración,
                             el system prompt, la base de conocimiento y los datos asociados.
                         </p>
 

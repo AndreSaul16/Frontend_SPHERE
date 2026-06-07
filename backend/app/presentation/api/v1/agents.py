@@ -311,8 +311,11 @@ async def delete_custom_agent(
                 {"metadata.agent_id": agent_id, "metadata.user_id": user_id}
             ):
                 await bucket.delete(grid_file._id)
-        except Exception:
-            pass
+        except Exception as gridfs_err:
+            logger.error(
+                f"Error limpiando archivos GridFS del agente {agent_id}: {gridfs_err}. "
+                f"Pueden quedar archivos huérfanos en GridFS."
+            )
 
         logger.info(f"Agente {agent_id} eliminado. Vectores: {kb_del.deleted_count}")
         return {"status": "deleted", "agent_id": agent_id}
