@@ -160,26 +160,14 @@ def test_adjust_after_completion_insufficient_for_extra(sync_db, credit_manager)
 # ---------------------------------------------------------------------------
 
 
-class TestPlanVariedFixtures:
-    """Verifica que los fixtures por plan tengan los balances correctos."""
+class TestPlanFixtures:
+    """Verifica que el fixture del plan único tenga los balances correctos."""
 
     def test_free_user_fixture_has_correct_balance(self, free_user_profile):
         """Free user: 5 mensajes, plan_id='free'."""
         assert free_user_profile["subscription"]["plan_id"] == "free"
         assert free_user_profile["wallet"]["pro_messages_balance"] == 5
         assert free_user_profile["wallet"]["topup_messages_balance"] == 0
-
-    def test_starter_user_fixture_has_correct_balance(self, starter_user_profile):
-        """Starter user: 50 mensajes, plan_id='starter'."""
-        assert starter_user_profile["subscription"]["plan_id"] == "starter"
-        assert starter_user_profile["wallet"]["pro_messages_balance"] == 50
-        assert starter_user_profile["wallet"]["topup_messages_balance"] == 0
-
-    def test_premium_user_fixture_has_correct_balance(self, premium_user_profile):
-        """Premium user: 100 mensajes, plan_id='premium'."""
-        assert premium_user_profile["subscription"]["plan_id"] == "premium"
-        assert premium_user_profile["wallet"]["pro_messages_balance"] == 100
-        assert premium_user_profile["wallet"]["topup_messages_balance"] == 0
 
 
 # ── 4k Token Cap Boundary Tests ────────────────────────────────

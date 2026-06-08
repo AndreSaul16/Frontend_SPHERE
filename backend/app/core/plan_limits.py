@@ -12,15 +12,15 @@ from app.core.errors import ErrorCode, app_error
 
 # Modelo solo-créditos: existe un único plan ("free"). La monetización es 100%
 # por consumo de créditos, así que las entitlements de capacidad (RAG, agentes
-# custom, API) son uniformes y generosas para todos — no se gatean por tier
-# (no hay tiers). Mantenemos las claves starter/premium por compatibilidad con
-# documentos de usuario antiguos, pero ya no se asignan.
+# custom, API) son uniformes — no se gatean por tier (no hay tiers).
+# Mantenemos las claves starter/premium por compatibilidad con documentos de
+# usuario antiguos, pero ya no se asignan.
 
 # Cuota de RAG en bytes por plan.
 RAG_QUOTA_BYTES = {
-    "free": 1024 * 1024 * 1024,      # 1 GB
-    "starter": 1024 * 1024 * 1024,
-    "premium": 1024 * 1024 * 1024,
+    "free": 20 * 1024 * 1024,        # 20 MB
+    "starter": 20 * 1024 * 1024,
+    "premium": 20 * 1024 * 1024,
 }
 
 # Máximo de agentes custom por plan.

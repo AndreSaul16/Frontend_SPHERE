@@ -44,7 +44,7 @@ class UsageInfo(BaseModel):
 
 
 class SubscriptionInfo(BaseModel):
-    plan_id: Literal["free", "starter", "premium"] = "free"
+    plan_id: Literal["free"] = "free"
     status: Literal["active", "past_due", "canceled"] = "active"
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # Stripe (pagos)
-    # Modelo solo-créditos: Free (50 créditos/mes gratis) + compras puntuales de
+    # Modelo solo-créditos: Free (30 créditos/mes gratis) + compras puntuales de
     # créditos (packs de recarga + top-ups). NO hay suscripciones de pago: todo lo
     # de pago es one-time (mode=payment). Crea los productos en el dashboard Stripe
     # con scripts/stripe_bootstrap.py y pega los Price IDs aquí.
@@ -97,11 +97,10 @@ class Settings(BaseSettings):
     def plan_messages_map(self) -> dict[str, int]:
         """Mapeo plan_id -> créditos mensuales que otorga el plan.
 
-        Solo existe el plan Free: 50 créditos/mes gratis (≈50 chats o ~10 board
-        meetings) para enganchar sin disparar costes (~7€/usuario = presupuesto
-        de marketing). Todo lo demás se compra como créditos puntuales."""
+        Solo existe el plan Free: 30 créditos/mes gratis (≈30 chats o ~6 board
+        meetings). Todo lo demás se compra como créditos puntuales."""
         return {
-            "free": 50,
+            "free": 30,
         }
 
     @property

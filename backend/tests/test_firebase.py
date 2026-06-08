@@ -23,6 +23,7 @@ def test_init_firebase_skips_when_no_path():
     """Si FIREBASE_CREDENTIALS_PATH está vacío, no hace nada y no marca como inicializado."""
     with patch("app.core.auth.settings") as mock_settings:
         mock_settings.FIREBASE_CREDENTIALS_PATH = ""
+        mock_settings.FIREBASE_CREDENTIALS_JSON = ""
         init_firebase()
     assert auth_module._firebase_initialized is False
 
@@ -31,7 +32,8 @@ def test_init_firebase_raises_when_file_missing(tmp_path):
     """Si el path apunta a un archivo inexistente, init_firebase propaga la excepción."""
     with patch("app.core.auth.settings") as mock_settings:
         mock_settings.FIREBASE_CREDENTIALS_PATH = str(tmp_path / "no_existe.json")
-        with pytest.raises(Exception):
+        mock_settings.FIREBASE_CREDENTIALS_JSON = ""
+        with pytest.raises(FileNotFoundError):
             init_firebase()
     assert auth_module._firebase_initialized is False
 
@@ -40,6 +42,7 @@ def test_init_firebase_sets_initialized_on_success():
     """Con SDK inicializado correctamente, _firebase_initialized queda en True."""
     with patch("app.core.auth.settings") as mock_settings:
         mock_settings.FIREBASE_CREDENTIALS_PATH = "/fake/creds.json"
+        mock_settings.FIREBASE_CREDENTIALS_JSON = ""
         with patch("app.core.auth.credentials.Certificate"):
             with patch("app.core.auth.firebase_admin.initialize_app"):
                 init_firebase()
@@ -243,13 +246,3 @@ class TestPlanVariedFixtures:
         """Free fixture: 5 créditos, plan_id='free'."""
         assert free_user_profile["subscription"]["plan_id"] == "free"
         assert free_user_profile["wallet"]["pro_messages_balance"] == 5
-
-    def test_starter_user_fixture_balance(self, starter_user_profile):
-        """Starter fixture: 50 créditos, plan_id='starter'."""
-        assert starter_user_profile["subscription"]["plan_id"] == "starter"
-        assert starter_user_profile["wallet"]["pro_messages_balance"] == 50
-
-    def test_premium_user_fixture_balance(self, premium_user_profile):
-        """Premium fixture: 100 créditos, plan_id='premium'."""
-        assert premium_user_profile["subscription"]["plan_id"] == "premium"
-        assert premium_user_profile["wallet"]["pro_messages_balance"] == 100

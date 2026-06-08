@@ -61,19 +61,17 @@ MOCK_USER_B = {
 }
 
 
-# Plan wallet configs — balances según especificación
-# Test balances are intentionally low (5/50/100) for speed and determinism.
-# Production values are 5/1000/2000 (see config.py plan_messages_map).
-# Low balances make credit-exhaustion tests fast and predictable.
+# Plan wallet config — modelo single-plan: solo "free".
+# Test balance es intencionalmente bajo (5) para velocidad y determinismo.
+# El valor de producción es 30 (ver config.py plan_messages_map).
+# Balances bajos hacen los tests de agotamiento de créditos rápidos y predecibles.
 _PLAN_WALLETS = {
     "free": {"pro_messages_balance": 5, "pro_messages_granted_this_period": 5},
-    "starter": {"pro_messages_balance": 50, "pro_messages_granted_this_period": 50},
-    "premium": {"pro_messages_balance": 100, "pro_messages_granted_this_period": 100},
 }
 
 
 def _make_user_profile(
-    firebase_claims: dict, plan_id: str = "premium", email_verified: bool = True
+    firebase_claims: dict, plan_id: str = "free", email_verified: bool = True
 ) -> dict:
     """Genera un perfil de usuario completo compatible con UserResponse.
 
@@ -82,7 +80,7 @@ def _make_user_profile(
         plan_id: Tier del plan ("free", "starter", "premium"). Default "premium".
         email_verified: True para usuarios verificados (default), False para email_unverified.
     """
-    wallet_cfg = _PLAN_WALLETS.get(plan_id, _PLAN_WALLETS["premium"])
+    wallet_cfg = _PLAN_WALLETS.get(plan_id, _PLAN_WALLETS["free"])
     status = "active" if email_verified else "email_unverified"
     pro_balance = wallet_cfg["pro_messages_balance"] if email_verified else 0
     return {
@@ -119,23 +117,11 @@ def _make_user_profile(
     }
 
 
-# Fixtures para cada plan — accesibles vía nombre de fixture en tests
+# Fixtures para cada plan — modelo single-plan: solo free
 @pytest.fixture
 def free_user_profile() -> dict:
     """Perfil de usuario free plan (5 mensajes, sin top-ups)."""
     return _make_user_profile(MOCK_USER_A, plan_id="free")
-
-
-@pytest.fixture
-def starter_user_profile() -> dict:
-    """Perfil de usuario starter plan (50 mensajes, sin top-ups)."""
-    return _make_user_profile(MOCK_USER_A, plan_id="starter")
-
-
-@pytest.fixture
-def premium_user_profile() -> dict:
-    """Perfil de usuario premium plan (2000 mensajes, sin top-ups)."""
-    return _make_user_profile(MOCK_USER_A, plan_id="premium")
 
 
 @pytest.fixture

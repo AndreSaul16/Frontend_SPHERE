@@ -1,8 +1,7 @@
 """
-Integration tests for per-plan rate limiting.
+Integration tests for per-plan rate limiting (modelo single-plan: todos uniformes).
 Verifica que:
-- Free user: 10 OK, 11th → rate-limited (429)
-- Premium user: 50 requests pass, 51st → rate-limited
+- 60 requests pasan, 61st → rate-limited (429)
 - Rate limiter no-op when Redis unavailable
 """
 import pytest
@@ -21,11 +20,11 @@ def _acquire_until_blocked(limiter, key: str, max_requests: int) -> int:
     return count
 
 
-class TestRateLimitByPlan:
-    """Integration tests — usa pyrate_limiter real con config de plan_limits."""
+class TestRateLimitSinglePlan:
+    """Integration tests — modelo single-plan: todos los planes tienen la misma tasa (60 req/min)."""
 
-    def test_free_user_rate_limit_blocks_after_10(self):
-        """Free user: 10 requests OK, 11th → blocked (429)."""
+    def test_rate_limit_blocks_after_quota(self):
+        """60 requests OK, 61st → blocked (429)."""
         from pyrate_limiter import Limiter, Rate, Duration
         from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN
 
@@ -33,57 +32,28 @@ class TestRateLimitByPlan:
         rate = Rate(times, Duration.SECOND * seconds)
         limiter = Limiter(rate)
 
-        passed = _acquire_until_blocked(limiter, "test_free_user", times + 5)
+        passed = _acquire_until_blocked(limiter, "test_quota_user", times + 5)
         assert passed == times, (
-            f"Free user should get exactly {times} requests, got {passed}"
+            f"User should get exactly {times} requests, got {passed}"
         )
 
         # La siguiente después del límite debe fallar
-        assert not limiter.try_acquire("test_free_user", blocking=False), (
+        assert not limiter.try_acquire("test_quota_user", blocking=False), (
             f"Request {times + 1} should be rate-limited (429)"
         )
 
-    def test_premium_user_rate_limit_allows_50(self):
-        """Premium user: 50 requests within limit — all pass."""
+    def test_rate_limit_allows_within_quota(self):
+        """30 requests dentro del límite de 60 → todas pasan."""
         from pyrate_limiter import Limiter, Rate, Duration
         from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN
 
-        times, seconds = RATE_LIMIT_CHAT_BY_PLAN["premium"]
+        times, seconds = RATE_LIMIT_CHAT_BY_PLAN["free"]
         rate = Rate(times, Duration.SECOND * seconds)
         limiter = Limiter(rate)
 
-        # Premium tiene 60/min → 50 requests deben pasar todas
-        passed = _acquire_until_blocked(limiter, "test_premium_user", 50)
-        assert passed == 50, (
-            f"Premium should allow 50 requests, got {passed}"
-        )
-
-    def test_premium_rate_limit_blocks_at_61(self):
-        """Premium user: 60 OK, 61st → blocked."""
-        from pyrate_limiter import Limiter, Rate, Duration
-        from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN
-
-        times, seconds = RATE_LIMIT_CHAT_BY_PLAN["premium"]
-        rate = Rate(times, Duration.SECOND * seconds)
-        limiter = Limiter(rate)
-
-        passed = _acquire_until_blocked(limiter, "test_premium_block", times + 5)
-        assert passed == times, (
-            f"Premium should get exactly {times} requests, got {passed}"
-        )
-
-    def test_starter_user_rate_limit_allows_30(self):
-        """Starter user: 30 requests all pass."""
-        from pyrate_limiter import Limiter, Rate, Duration
-        from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN
-
-        times, seconds = RATE_LIMIT_CHAT_BY_PLAN["starter"]
-        rate = Rate(times, Duration.SECOND * seconds)
-        limiter = Limiter(rate)
-
-        passed = _acquire_until_blocked(limiter, "test_starter_user", times + 5)
-        assert passed == times, (
-            f"Starter should get exactly {times} requests, got {passed}"
+        passed = _acquire_until_blocked(limiter, "test_within_user", 30)
+        assert passed == 30, (
+            f"30 requests should all pass within {times}/min limit, got {passed}"
         )
 
 
@@ -155,8 +125,7 @@ class TestRateLimitNoopWhenRedisDown:
         try:
             # El rate limit config sigue siendo válido
             from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN
-            assert RATE_LIMIT_CHAT_BY_PLAN["free"] == (10, 60)
-            assert RATE_LIMIT_CHAT_BY_PLAN["premium"] == (60, 60)
+            assert RATE_LIMIT_CHAT_BY_PLAN["free"] == (60, 60)
 
             # Cuando _redis_client es None, el stream.py salta el
             # bloque completo de rate limiting → no-op.
@@ -166,17 +135,17 @@ class TestRateLimitNoopWhenRedisDown:
             redis_mod._redis_client = old_redis
 
     def test_rate_limiter_config_matches_spec(self):
-        """Los límites configurados coinciden con la especificación."""
+        """Los límites configurados coinciden con el modelo single-plan: todos uniformes."""
         from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN, RATE_LIMIT_GENERAL_BY_PLAN
 
         assert RATE_LIMIT_CHAT_BY_PLAN == {
-            "free": (10, 60),
-            "starter": (30, 60),
+            "free": (60, 60),
+            "starter": (60, 60),
             "premium": (60, 60),
         }
 
         assert RATE_LIMIT_GENERAL_BY_PLAN == {
-            "free": (30, 60),
-            "starter": (60, 60),
+            "free": (120, 60),
+            "starter": (120, 60),
             "premium": (120, 60),
         }

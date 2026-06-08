@@ -16,7 +16,7 @@ async def test_get_billing_info(authed_client_a: AsyncClient, db_instance):
         {"firebase_uid": "test_user_a"},
         {"$set": {
             "wallet": {"pro_messages_balance": 150, "topup_messages_balance": 50},
-            "subscription": {"plan_id": "premium"}
+            "subscription": {"plan_id": "free"}
         }}
     )
     
@@ -24,7 +24,7 @@ async def test_get_billing_info(authed_client_a: AsyncClient, db_instance):
     
     assert response.status_code == 200
     data = response.json()
-    assert data["plan_id"] == "premium"
+    assert data["plan_id"] == "free"
     assert data["pro_messages_balance"] == 150
     assert data["topup_messages_balance"] == 50
 
@@ -34,11 +34,11 @@ async def test_create_checkout_session(authed_client_a: AsyncClient):
     with patch("app.infrastructure.stripe_client.StripeClient.create_checkout_session") as mock_stripe:
         mock_stripe.return_value = "https://checkout.stripe.com/test"
         
-        response = await authed_client_a.post("/api/v1/billing/checkout", json={"plan_id": "premium"})
+        response = await authed_client_a.post("/api/v1/billing/checkout", json={"plan_id": "executive"})
         
         assert response.status_code == 200
         assert response.json()["url"] == "https://checkout.stripe.com/test"
-        mock_stripe.assert_called_once_with("test_user_a", "premium", "usera@test.com")
+        mock_stripe.assert_called_once_with("test_user_a", "executive", "usera@test.com")
 
 
 @pytest.mark.asyncio
@@ -60,33 +60,30 @@ async def test_create_portal_session(authed_client_a: AsyncClient, db_instance):
 
 
 # ---------------------------------------------------------------------------
-# Task 3.1 / 3.3 — Top-up tier validation tests
+# Task 3.1 / 3.3 — Validación de SKU comprable (modelo single-plan)
 # ---------------------------------------------------------------------------
 
 
-class TestTopupTierValidation:
-    """Verifica que el tier del usuario coincida con el top-up solicitado."""
+class TestTopupSKUValidation:
+    """Verifica que solo los SKUs del catálogo sean comprables."""
 
-    def test_allowed_topups_mapping_is_correct(self):
-        """Mapping ALLOWED_TOPUPS_BY_PLAN debe coincidir con la especificación."""
-        from app.core.plan_limits import ALLOWED_TOPUPS_BY_PLAN
+    def test_purchasable_skus_are_correct(self):
+        """PURCHASABLE_SKUS debe contener los 5 packs y top-ups reales."""
+        from app.core.plan_limits import PURCHASABLE_SKUS
 
-        # free → solo topup_free
-        assert ALLOWED_TOPUPS_BY_PLAN["free"] == {"topup_free"}
-        # starter → solo topup_starter
-        assert ALLOWED_TOPUPS_BY_PLAN["starter"] == {"topup_starter"}
-        # premium → topups premium
-        assert ALLOWED_TOPUPS_BY_PLAN["premium"] == {
-            "topup_premium_1k",
-            "topup_premium_2k",
-            "topup_premium_10k",
+        assert PURCHASABLE_SKUS == {
+            "executive",
+            "director",
+            "boardroom",
+            "quick_meeting",
+            "deep_dive",
         }
 
     @pytest.mark.asyncio
-    async def test_free_user_buys_topup_free_returns_200(
+    async def test_user_can_purchase_valid_sku_executive(
         self, authed_client_a: AsyncClient, db_instance
     ):
-        """Free user buying topup_free → 200 OK."""
+        """Cualquier usuario puede comprar el SKU 'executive' → 200 OK."""
         from tests.conftest import _make_user_profile, MOCK_USER_A
 
         free_profile = _make_user_profile(MOCK_USER_A, plan_id="free")
@@ -95,16 +92,52 @@ class TestTopupTierValidation:
             with patch("app.infrastructure.stripe_client.StripeClient.create_checkout_session") as mock_stripe:
                 mock_stripe.return_value = "https://checkout.stripe.com/test"
                 response = await authed_client_a.post(
-                    "/api/v1/billing/checkout", json={"plan_id": "topup_free"}
+                    "/api/v1/billing/checkout", json={"plan_id": "executive"}
                 )
 
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_free_user_attempts_premium_topup_returns_403(
+    async def test_user_can_purchase_valid_sku_director(
         self, authed_client_a: AsyncClient, db_instance
     ):
-        """Free user buying topup_premium_10k → 403 Forbidden."""
+        """Cualquier usuario puede comprar el SKU 'director' → 200 OK."""
+        from tests.conftest import _make_user_profile, MOCK_USER_A
+
+        free_profile = _make_user_profile(MOCK_USER_A, plan_id="free")
+
+        with patch("app.core.auth._auto_provision_user", return_value=free_profile):
+            with patch("app.infrastructure.stripe_client.StripeClient.create_checkout_session") as mock_stripe:
+                mock_stripe.return_value = "https://checkout.stripe.com/test"
+                response = await authed_client_a.post(
+                    "/api/v1/billing/checkout", json={"plan_id": "director"}
+                )
+
+        assert response.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_user_cannot_purchase_invalid_sku(
+        self, authed_client_a: AsyncClient, db_instance
+    ):
+        """SKU inexistente ('super_mega_pack') → 403 Forbidden."""
+        from tests.conftest import _make_user_profile, MOCK_USER_A
+
+        free_profile = _make_user_profile(MOCK_USER_A, plan_id="free")
+
+        with patch("app.core.auth._auto_provision_user", return_value=free_profile):
+            response = await authed_client_a.post(
+                "/api/v1/billing/checkout", json={"plan_id": "super_mega_pack"}
+            )
+
+        assert response.status_code == 403
+        data = response.json()
+        assert data["detail"]["error"] == "billing.topup_not_allowed"
+
+    @pytest.mark.asyncio
+    async def test_legacy_sku_topup_premium_rejected(
+        self, authed_client_a: AsyncClient, db_instance
+    ):
+        """Viejo SKU tier-gateado ('topup_premium_10k') → 403 (no está en catálogo)."""
         from tests.conftest import _make_user_profile, MOCK_USER_A
 
         free_profile = _make_user_profile(MOCK_USER_A, plan_id="free")
@@ -118,56 +151,20 @@ class TestTopupTierValidation:
         data = response.json()
         assert data["detail"]["error"] == "billing.topup_not_allowed"
 
-    @pytest.mark.asyncio
-    async def test_premium_user_buys_premium_topup_returns_200(
-        self, authed_client_a: AsyncClient, db_instance
-    ):
-        """Premium user buying topup_premium_1k → 200 OK."""
-        from tests.conftest import _make_user_profile, MOCK_USER_A
-
-        premium_profile = _make_user_profile(MOCK_USER_A, plan_id="premium")
-
-        with patch("app.core.auth._auto_provision_user", return_value=premium_profile):
-            with patch("app.infrastructure.stripe_client.StripeClient.create_checkout_session") as mock_stripe:
-                mock_stripe.return_value = "https://checkout.stripe.com/test"
-                response = await authed_client_a.post(
-                    "/api/v1/billing/checkout", json={"plan_id": "topup_premium_1k"}
-                )
-
-        assert response.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_starter_user_buys_starter_topup_returns_200(
-        self, authed_client_a: AsyncClient, db_instance
-    ):
-        """Starter user buying topup_starter → 200 OK."""
-        from tests.conftest import _make_user_profile, MOCK_USER_A
-
-        starter_profile = _make_user_profile(MOCK_USER_A, plan_id="starter")
-
-        with patch("app.core.auth._auto_provision_user", return_value=starter_profile):
-            with patch("app.infrastructure.stripe_client.StripeClient.create_checkout_session") as mock_stripe:
-                mock_stripe.return_value = "https://checkout.stripe.com/test"
-                response = await authed_client_a.post(
-                    "/api/v1/billing/checkout", json={"plan_id": "topup_starter"}
-                )
-
-        assert response.status_code == 200
-
 
 # ---------------------------------------------------------------------------
-# Task 3.2 / 3.3 — Webhook defense-in-depth tests
+# Webhook defense-in-depth: SKU inválido no otorga créditos
 # ---------------------------------------------------------------------------
 
 
-class TestWebhookTopupDefense:
-    """Verifica que el webhook NO otorga créditos si el top-up no corresponde al tier."""
+class TestWebhookInvalidSKU:
+    """Verifica que el webhook NO otorga créditos si el SKU no existe en el catálogo."""
 
     @pytest.mark.asyncio
-    async def test_webhook_cross_tier_topup_grants_no_credits(
+    async def test_webhook_invalid_sku_grants_no_credits(
         self, async_client: AsyncClient, db_instance
     ):
-        """Free user recibe webhook de topup_premium_10k → no créditos, warning log."""
+        """Usuario free recibe webhook con SKU 'topup_premium_10k' → 200 OK, 0 créditos."""
         db_sync = db_instance.get_sync_client()["sphere_db"]
 
         # Configurar usuario free
@@ -184,12 +181,12 @@ class TestWebhookTopupDefense:
 
         # Limpiar idempotencia
         db_sync["stripe_events_processed"].delete_many(
-            {"_id": "evt_cross_tier_topup"}
+            {"_id": "evt_invalid_sku_topup"}
         )
 
         import stripe as stripe_lib
         event = {
-            "id": "evt_cross_tier_topup",
+            "id": "evt_invalid_sku_topup",
             "type": "checkout.session.completed",
             "data": {
                 "object": {

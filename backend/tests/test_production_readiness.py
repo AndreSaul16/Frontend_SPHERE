@@ -13,14 +13,14 @@ class TestPlanRateLimits:
         from app.core.plan_limits import RATE_LIMIT_CHAT_BY_PLAN, RATE_LIMIT_GENERAL_BY_PLAN
 
         assert RATE_LIMIT_CHAT_BY_PLAN == {
-            "free": (10, 60),
-            "starter": (30, 60),
+            "free": (60, 60),
+            "starter": (60, 60),
             "premium": (60, 60),
         }
 
         assert RATE_LIMIT_GENERAL_BY_PLAN == {
-            "free": (30, 60),
-            "starter": (60, 60),
+            "free": (120, 60),
+            "starter": (120, 60),
             "premium": (120, 60),
         }
 
@@ -30,7 +30,7 @@ class TestPlanRateLimits:
 
         assert "free" in RATE_LIMIT_CHAT_BY_PLAN
         free_limit = RATE_LIMIT_CHAT_BY_PLAN["free"]
-        assert free_limit[0] == 10
+        assert free_limit[0] == 60
 
 
 class TestEmailVerifiedGate:

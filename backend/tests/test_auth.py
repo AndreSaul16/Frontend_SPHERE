@@ -94,7 +94,7 @@ class TestEnsureWallet:
 
     @pytest.mark.asyncio
     async def test_ensure_wallet_with_empty_dict_reinitializes(self):
-        """CS-001: wallet={} → debe re-inicializarse con 5 créditos."""
+        """CS-001: wallet={} → debe re-inicializarse con 30 créditos."""
         from app.core.auth import _ensure_wallet
         from datetime import datetime, timezone
 
@@ -119,15 +119,15 @@ class TestEnsureWallet:
 
         assert update_filter == {"firebase_uid": "user_empty_wallet"}
         assert "$set" in update_operation
-        # El wallet reparado debe tener pro_messages_balance = 50 (plan free)
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
+        # El wallet reparado debe tener pro_messages_balance = 30 (plan free)
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 30
         # El resultado debe incluir el wallet reparado
         assert "wallet" in result
-        assert result["wallet"]["pro_messages_balance"] == 50
+        assert result["wallet"]["pro_messages_balance"] == 30
 
     @pytest.mark.asyncio
     async def test_ensure_wallet_with_none_wallet_reinitializes(self):
-        """CS-001: wallet=None → debe re-inicializarse con 5 créditos."""
+        """CS-001: wallet=None → debe re-inicializarse con 30 créditos."""
         from app.core.auth import _ensure_wallet
 
         user_doc = {
@@ -146,8 +146,8 @@ class TestEnsureWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         update_operation = call_args[0][1]
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
-        assert result["wallet"]["pro_messages_balance"] == 50
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 30
+        assert result["wallet"]["pro_messages_balance"] == 30
 
     @pytest.mark.asyncio
     async def test_ensure_wallet_with_valid_wallet_passes_through(self):
@@ -197,8 +197,8 @@ class TestEnsureWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         update_operation = call_args[0][1]
-        assert update_operation["$set"]["wallet.pro_messages_balance"] == 50
-        assert result["wallet"]["pro_messages_balance"] == 50
+        assert update_operation["$set"]["wallet.pro_messages_balance"] == 30
+        assert result["wallet"]["pro_messages_balance"] == 30
         assert result["wallet"]["topup_messages_balance"] == 0
 
 
@@ -212,7 +212,7 @@ class TestRepairWallet:
 
     @pytest.mark.asyncio
     async def test_repair_wallet_fixes_invalid_wallet(self):
-        """CS-003: wallet inválido → _repair_wallet lo inicializa con 5 créditos."""
+        """CS-003: wallet inválido → _repair_wallet lo inicializa con 30 créditos."""
         from app.core.auth import _repair_wallet
 
         user_doc = {
@@ -230,8 +230,8 @@ class TestRepairWallet:
         mock_collection.update_one.assert_called_once()
         call_args = mock_collection.update_one.call_args
         assert call_args[0][0] == {"firebase_uid": "user_repair"}
-        assert call_args[0][1]["$set"]["wallet.pro_messages_balance"] == 50
-        assert result["wallet"]["pro_messages_balance"] == 50
+        assert call_args[0][1]["$set"]["wallet.pro_messages_balance"] == 30
+        assert result["wallet"]["pro_messages_balance"] == 30
 
     @pytest.mark.asyncio
     async def test_repair_wallet_preserves_valid_wallet(self):

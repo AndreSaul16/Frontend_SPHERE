@@ -190,7 +190,7 @@ async def test_stream_allows_verified_user():
     verified_user = {
         "firebase_uid": "verified_stream_uid",
         "email": "verified@test.com",
-        "subscription": {"plan_id": "premium", "status": "active"},
+        "subscription": {"plan_id": "free", "status": "active"},
         "wallet": {"pro_messages_balance": 100, "topup_messages_balance": 0},
     }
 
