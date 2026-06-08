@@ -86,20 +86,9 @@ Write-Host ""
 Write-Host "[4/4] Checking deployment status..." -ForegroundColor Yellow
 Start-Sleep -Seconds 5
 try {
-    # Compatible con Windows PowerShell 5.1 (sin operadores ?? / ?. de PS7).
-    $statusJson = railway service status --all --json 2>$null
-    if ($statusJson) {
-        $statusJson | ConvertFrom-Json | ForEach-Object {
-            $status = if ($_.statusEmoji) { $_.statusEmoji } else { "[?]" }
-            $name = if ($_.name) { $_.name } else { "unknown" }
-            $domain = $null
-            if ($_.serviceDomains -and $_.serviceDomains.Count -gt 0) { $domain = $_.serviceDomains[0].domain }
-            $url = if ($domain) { $domain } else { "no URL yet" }
-            Write-Host "  $status $name -> https://$url" -ForegroundColor White
-        }
-    } else {
-        Write-Host "  No status returned. Check: https://railway.com/dashboard" -ForegroundColor Yellow
-    }
+    # `railway service status` quedó deprecado; `railway status` da el overview
+    # de servicios + URLs + estado online, y funciona en PowerShell 5.1.
+    railway status
 } catch {
     Write-Host "  Could not fetch status: $_" -ForegroundColor Yellow
     Write-Host "  Check: https://railway.com/dashboard" -ForegroundColor Yellow
