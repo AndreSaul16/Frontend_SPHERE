@@ -6,6 +6,11 @@ param(
     [switch]$SkipLogin,
     [switch]$BackendOnly,
     [switch]$FrontendOnly,
+    # Nombres EXACTOS de los servicios en Railway (proyecto SPHERE). El servicio
+    # linkado por defecto puede ser otro (p.ej. n8n), por eso targeteamos siempre
+    # por --service y NO confiamos en `railway up` a secas.
+    [string]$BackendService = "Backend_SHPERE",
+    [string]$FrontendService = "Frontend_SPHERE",
     [string]$Message = "v3: CI/CD pipeline + Ragnarok production fixes"
 )
 
@@ -45,16 +50,16 @@ if (-not $SkipLogin) {
 # ── Step 2: Deploy Backend ──
 if (-not $FrontendOnly) {
     Write-Host ""
-    Write-Host "[2/4] Deploying Backend..." -ForegroundColor Yellow
+    Write-Host "[2/4] Deploying Backend -> $BackendService ..." -ForegroundColor Yellow
     Push-Location "$Root\backend"
     try {
-        railway up --detach -m "$Message [backend]"
-        Write-Host "  Backend deploy triggered!" -ForegroundColor Green
+        railway up --detach --service $BackendService -m "$Message [backend]"
+        if ($LASTEXITCODE -ne 0) { throw "railway up devolvio exit code $LASTEXITCODE" }
+        Write-Host "  Backend deploy triggered -> $BackendService" -ForegroundColor Green
     } catch {
         Write-Host "  Backend deploy FAILED: $_" -ForegroundColor Red
-        Write-Host "  Trying with --service flag..." -ForegroundColor Yellow
-        railway up --detach --service backend -m "$Message [backend]"
-        Write-Host "  Backend deploy triggered (fallback)." -ForegroundColor Green
+        Pop-Location
+        throw
     }
     Pop-Location
 }
@@ -62,16 +67,16 @@ if (-not $FrontendOnly) {
 # ── Step 3: Deploy Frontend ──
 if (-not $BackendOnly) {
     Write-Host ""
-    Write-Host "[3/4] Deploying Frontend..." -ForegroundColor Yellow
+    Write-Host "[3/4] Deploying Frontend -> $FrontendService ..." -ForegroundColor Yellow
     Push-Location "$Root\frontend"
     try {
-        railway up --detach -m "$Message [frontend]"
-        Write-Host "  Frontend deploy triggered!" -ForegroundColor Green
+        railway up --detach --service $FrontendService -m "$Message [frontend]"
+        if ($LASTEXITCODE -ne 0) { throw "railway up devolvio exit code $LASTEXITCODE" }
+        Write-Host "  Frontend deploy triggered -> $FrontendService" -ForegroundColor Green
     } catch {
         Write-Host "  Frontend deploy FAILED: $_" -ForegroundColor Red
-        Write-Host "  Trying with --service flag..." -ForegroundColor Yellow
-        railway up --detach --service frontend -m "$Message [frontend]"
-        Write-Host "  Frontend deploy triggered (fallback)." -ForegroundColor Green
+        Pop-Location
+        throw
     }
     Pop-Location
 }
