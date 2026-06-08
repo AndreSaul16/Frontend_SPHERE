@@ -300,6 +300,35 @@ async def router_node(state: AgentState):
     return turn_result
 
 
+def _strip_tools_from_history(messages):
+    """Board meeting: los agentes debaten en secuencia SIN nodo de ejecución de
+    tools. Si un agente dejó un AIMessage con `tool_calls` sin su ToolMessage de
+    respuesta, DeepSeek/OpenAI devuelven 400 ('an assistant message with
+    tool_calls must be followed by tool messages'). Limpiamos el historial:
+    - Quitamos los ToolMessage (huérfanos en board).
+    - Quitamos los tool_calls de los AIMessage, conservando su contenido.
+    Esto también recupera sesiones cuyo checkpoint quedó 'envenenado' por un
+    board que crasheó a mitad."""
+    cleaned = []
+    for m in messages:
+        if isinstance(m, ToolMessage):
+            continue
+        if isinstance(m, AIMessage):
+            has_tool_calls = bool(getattr(m, "tool_calls", None)) or bool(
+                (getattr(m, "additional_kwargs", None) or {}).get("tool_calls")
+            )
+            if has_tool_calls:
+                kwargs = {
+                    k: v
+                    for k, v in (getattr(m, "additional_kwargs", None) or {}).items()
+                    if k != "tool_calls"
+                }
+                cleaned.append(AIMessage(content=m.content or "", additional_kwargs=kwargs))
+                continue
+        cleaned.append(m)
+    return cleaned
+
+
 async def agent_node(state: AgentState):
     """El Experto (Core o Custom) responde.
 
@@ -367,6 +396,11 @@ async def agent_node(state: AgentState):
     # Filtrar SystemMessages viejos (el nuestro se reemplaza abajo)
     history = [msg for msg in all_messages if not isinstance(msg, SystemMessage)]
 
+    # Board meeting: no hay nodo de tools, así que limpiamos tool_calls colgantes
+    # del historial (incluido el checkpoint persistido) para no romper el LLM.
+    if state.get("board_mode"):
+        history = _strip_tools_from_history(history)
+
     # 6. Construir el prompt rico
     rich_system_prompt = AGENT_PROMPT_TEMPLATE.format(
         system_instruction=resolved.system_prompt,
@@ -401,9 +435,12 @@ async def agent_node(state: AgentState):
         request_timeout=60.0,
     )
 
-    # 8. Bind tools si el rol tiene herramientas disponibles
+    # 8. Bind tools si el rol tiene herramientas disponibles.
+    # EXCEPTO en board meeting: los agentes debaten (no ejecutan tools) y el
+    # workflow del board no tiene nodo de ejecución; bindear tools provocaría
+    # tool_calls colgantes que DeepSeek rechaza con 400 en el siguiente agente.
     tools = get_tools_for_role(effective_role)
-    if tools:
+    if tools and not state.get("board_mode"):
         llm = llm.bind_tools(tools)
 
     # 9. Llamada al experto
