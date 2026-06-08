@@ -271,6 +271,11 @@ def get_service_credentials_collection():
     return db.get_async_db()["user_service_credentials"]
 
 
+def get_user_oauth_apps_collection():
+    """Colección para OAuth apps por usuario (BYO): client_id + client_secret cifrado."""
+    return db.get_async_db()["user_oauth_apps"]
+
+
 # Aliases para compatibilidad con código existente
 sessions_collection = property(lambda self: get_sessions_collection())
 checkpoints_collection = property(lambda self: get_checkpoints_collection())

@@ -31,13 +31,11 @@ class Settings(BaseSettings):
     # Cifrado de tokens OAuth en reposo
     FERNET_KEY: str = ""
 
-    # OAuth Providers
-    GITHUB_CLIENT_ID: str = ""
-    GITHUB_CLIENT_SECRET: str = ""
-    NOTION_CLIENT_ID: str = ""
-    NOTION_CLIENT_SECRET: str = ""
-    SLACK_CLIENT_ID: str = ""
-    SLACK_CLIENT_SECRET: str = ""
+    # OAuth (BYO): cada usuario registra su propia OAuth app (client_id/secret),
+    # cifrada por-usuario en la colección user_oauth_apps. NO hay client_id/secret
+    # globales. Lo único global es el callback, que el usuario whitelistea en su
+    # app del provider. En prod debe apuntar al backend público, p.ej.
+    # https://<backend>/api/v1/integrations
     OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000/api/v1/integrations"
 
     # Redis

@@ -1,33 +1,35 @@
-"""OAuth provider para Slack."""
-from app.core.config import settings
+"""OAuth provider para Slack (BYO: client_id/secret vienen del usuario)."""
+import httpx
+
+# Scopes fijos para SPHERE (no los elige el usuario).
+DEFAULT_SCOPES = "chat:write,channels:read"
 
 
-SCOPES = "chat:write,channels:read"
-
-
-def authorize_url(state: str) -> str:
+def authorize_url(
+    state: str, client_id: str, redirect_uri: str, scopes: str = DEFAULT_SCOPES
+) -> str:
     """Genera la URL de autorización de Slack OAuth."""
     return (
         f"https://slack.com/oauth/v2/authorize"
-        f"?client_id={settings.SLACK_CLIENT_ID}"
-        f"&redirect_uri={settings.OAUTH_REDIRECT_BASE_URL}/slack/callback"
-        f"&scope={SCOPES}"
+        f"?client_id={client_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope={scopes}"
         f"&state={state}"
     )
 
 
-async def exchange_code(code: str) -> dict:
+async def exchange_code(
+    code: str, client_id: str, client_secret: str, redirect_uri: str
+) -> dict:
     """Intercambia el code de autorización por tokens."""
-    import httpx
-
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             "https://slack.com/api/oauth.v2.access",
             data={
-                "client_id": settings.SLACK_CLIENT_ID,
-                "client_secret": settings.SLACK_CLIENT_SECRET,
+                "client_id": client_id,
+                "client_secret": client_secret,
                 "code": code,
-                "redirect_uri": f"{settings.OAUTH_REDIRECT_BASE_URL}/slack/callback",
+                "redirect_uri": redirect_uri,
             },
         )
         resp.raise_for_status()
@@ -44,10 +46,8 @@ async def exchange_code(code: str) -> dict:
         }
 
 
-async def revoke(token: str):
+async def revoke(token: str, client_id: str = "", client_secret: str = ""):
     """Revoca un token de Slack."""
-    import httpx
-
     async with httpx.AsyncClient() as client:
         await client.post(
             "https://slack.com/api/auth.revoke",

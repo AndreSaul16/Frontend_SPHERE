@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse
 from app.core.auth import get_current_user
 from app.core.config import settings
 from app.core.credentials import credentials_service
+from app.domain.models.oauth_app import OAuthAppCreate
 from app.infrastructure.database import get_oauth_states_collection
 from app.core.logger import api_logger as logger
 
@@ -25,6 +26,17 @@ PROVIDERS = {
     "notion": __import__("app.infrastructure.integrations.providers.notion", fromlist=["notion"]),
     "slack": __import__("app.infrastructure.integrations.providers.slack", fromlist=["slack"]),
 }
+
+
+def _redirect_uri(provider: str) -> str:
+    """Callback global y único (lo whitelistea el usuario al crear su OAuth app)."""
+    return f"{settings.OAUTH_REDIRECT_BASE_URL}/{provider}/callback"
+
+
+def _default_scopes(provider: str) -> list[str]:
+    """Scopes fijos por provider (definidos en el módulo del provider)."""
+    raw = getattr(PROVIDERS[provider], "DEFAULT_SCOPES", "") or ""
+    return [s for s in raw.split(",") if s]
 
 
 def _generate_state(user_id: str) -> str:
@@ -79,6 +91,18 @@ async def connect_provider(
         )
 
     user_id = user["firebase_uid"]
+
+    # BYO: el usuario debe haber registrado su propia OAuth app antes de conectar.
+    app = await credentials_service.get_oauth_app(user_id, provider)
+    if not app:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No tienes una OAuth app de '{provider}' registrada. "
+                f"Regístrala primero (client_id + client_secret)."
+            ),
+        )
+
     state = _generate_state(user_id)
 
     # Guardar state en DB para verificación en callback
@@ -93,7 +117,9 @@ async def connect_provider(
     })
 
     provider_module = PROVIDERS[provider]
-    auth_url = provider_module.authorize_url(state)
+    auth_url = provider_module.authorize_url(
+        state, app["client_id"], _redirect_uri(provider)
+    )
 
     logger.info(f"Iniciando OAuth {provider} para user {user_id}")
     return {"authorize_url": auth_url}
@@ -126,10 +152,21 @@ async def provider_callback(
     if not _verify_state(state, user_id):
         raise HTTPException(status_code=400, detail="State inválido")
 
+    # Cargar la OAuth app del usuario (necesaria para el intercambio).
+    app = await credentials_service.get_oauth_app(user_id, provider)
+    if not app:
+        logger.warning(f"Callback {provider} sin OAuth app registrada (user {user_id})")
+        raise HTTPException(
+            status_code=400,
+            detail=f"No hay OAuth app de '{provider}' registrada para este usuario.",
+        )
+
     # Intercambiar code por tokens
     try:
         provider_module = PROVIDERS[provider]
-        token_data = await provider_module.exchange_code(code)
+        token_data = await provider_module.exchange_code(
+            code, app["client_id"], app["client_secret"], _redirect_uri(provider)
+        )
 
         await credentials_service.store_token(
             user_id=user_id,
@@ -192,3 +229,74 @@ async def disconnect_provider(
 
     logger.info(f"Provider {provider} desconectado para user {user_id}")
     return {"status": "disconnected", "provider": provider}
+
+
+# ============================================================
+# Gestión de la OAuth app del usuario (BYO)
+# ============================================================
+
+
+@router.get("/apps")
+async def list_oauth_apps(user: dict = Depends(get_current_user)):
+    """
+    Lista las OAuth apps registradas del usuario (sin exponer el client_secret).
+    Incluye el callback URL que debe whitelistear en cada provider.
+    """
+    user_id = user["firebase_uid"]
+    apps = await credentials_service.list_oauth_apps(user_id)
+    return {
+        "apps": apps,
+        "available": list(PROVIDERS.keys()),
+        "callback_urls": {p: _redirect_uri(p) for p in PROVIDERS},
+    }
+
+
+@router.put("/{provider}/app")
+async def register_oauth_app(
+    provider: str,
+    payload: OAuthAppCreate,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Registra (o actualiza) la OAuth app del usuario para un provider.
+    El usuario debe haber creado su OAuth app en el provider y haber puesto el
+    `callback_url` (que devolvemos aquí) como Authorization callback URL.
+    """
+    if provider not in PROVIDERS:
+        raise HTTPException(status_code=400, detail="Provider no soportado")
+
+    user_id = user["firebase_uid"]
+    await credentials_service.store_oauth_app(
+        user_id=user_id,
+        provider=provider,
+        client_id=payload.client_id,
+        client_secret=payload.client_secret,
+        scopes=_default_scopes(provider),
+    )
+    logger.info(f"OAuth app '{provider}' registrada para user {user_id}")
+    return {
+        "status": "registered",
+        "provider": provider,
+        "callback_url": _redirect_uri(provider),
+        "scopes": _default_scopes(provider),
+    }
+
+
+@router.delete("/{provider}/app")
+async def delete_oauth_app(
+    provider: str,
+    user: dict = Depends(get_current_user),
+):
+    """Elimina la OAuth app del usuario y revoca los tokens emitidos con ella."""
+    if provider not in PROVIDERS:
+        raise HTTPException(status_code=400, detail="Provider no soportado")
+
+    user_id = user["firebase_uid"]
+    removed = await credentials_service.revoke_oauth_app(user_id, provider)
+    if not removed:
+        raise HTTPException(
+            status_code=404, detail=f"No había OAuth app de '{provider}' registrada"
+        )
+
+    logger.info(f"OAuth app '{provider}' eliminada para user {user_id}")
+    return {"status": "deleted", "provider": provider}

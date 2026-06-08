@@ -193,7 +193,16 @@ class CredentialsService:
                 # GitHub tokens de OAuth App no expiran, solo los de GitHub App
                 return self._decrypt(cred["access_token_enc"])
 
-            elif provider == "notion":
+            # Notion/Slack: usar las creds de la OAuth app del propio usuario (BYO).
+            app = await self.get_oauth_app(user_id, provider)
+            if not app:
+                logger.warning(
+                    f"No hay OAuth app de {provider} registrada para user {user_id}; "
+                    "no se puede refrescar el token."
+                )
+                return None
+
+            if provider == "notion":
                 async with httpx.AsyncClient() as client:
                     resp = await client.post(
                         "https://api.notion.com/v1/oauth/token",
@@ -201,7 +210,7 @@ class CredentialsService:
                             "grant_type": "refresh_token",
                             "refresh_token": refresh_token,
                         },
-                        auth=(settings.NOTION_CLIENT_ID, settings.NOTION_CLIENT_SECRET),
+                        auth=(app["client_id"], app["client_secret"]),
                     )
                     resp.raise_for_status()
                     data = resp.json()
@@ -222,8 +231,8 @@ class CredentialsService:
                         data={
                             "grant_type": "refresh_token",
                             "refresh_token": refresh_token,
-                            "client_id": settings.SLACK_CLIENT_ID,
-                            "client_secret": settings.SLACK_CLIENT_SECRET,
+                            "client_id": app["client_id"],
+                            "client_secret": app["client_secret"],
                         },
                     )
                     resp.raise_for_status()
@@ -370,6 +379,106 @@ class CredentialsService:
 
         if result.modified_count > 0:
             logger.info(f"Service credential '{service}' revocada para user {user_id}")
+            return True
+        return False
+
+    # ============================================================
+    # USER OAUTH APPS (BYO — cada usuario su propia OAuth app)
+    # ============================================================
+
+    async def store_oauth_app(
+        self,
+        user_id: str,
+        provider: str,
+        client_id: str,
+        client_secret: str,
+        scopes: Optional[list[str]] = None,
+    ):
+        """
+        Cifra y almacena la OAuth app (client_id + client_secret) de un usuario.
+        El client_secret se cifra con Fernet; el client_id se guarda en claro
+        (no es secreto). Upsert: sobreescribe si ya existe.
+        """
+        from app.infrastructure.database import get_user_oauth_apps_collection
+
+        col = get_user_oauth_apps_collection()
+        now = datetime.now(timezone.utc)
+
+        doc = {
+            "user_id": user_id,
+            "provider": provider,
+            "client_id": client_id,
+            "client_secret_enc": self._encrypt(client_secret),
+            "scopes": scopes or [],
+            "updated_at": now,
+            "revoked_at": None,
+        }
+
+        await col.update_one(
+            {"user_id": user_id, "provider": provider},
+            {"$set": doc, "$setOnInsert": {"created_at": now}},
+            upsert=True,
+        )
+
+        # NUNCA loguear el client_secret.
+        logger.info(f"OAuth app '{provider}' almacenada para user {user_id}")
+
+    async def get_oauth_app(self, user_id: str, provider: str) -> Optional[dict]:
+        """
+        Obtiene la OAuth app de un usuario (client_id + client_secret descifrado).
+        Retorna None si no existe o está revocada.
+        """
+        from app.infrastructure.database import get_user_oauth_apps_collection
+
+        col = get_user_oauth_apps_collection()
+        app = await col.find_one(
+            {"user_id": user_id, "provider": provider, "revoked_at": None}
+        )
+        if not app:
+            return None
+
+        return {
+            "client_id": app["client_id"],
+            "client_secret": self._decrypt(app["client_secret_enc"]),
+            "scopes": app.get("scopes", []),
+        }
+
+    async def list_oauth_apps(self, user_id: str) -> list[dict]:
+        """Lista las OAuth apps registradas del usuario (sin exponer el secret)."""
+        from app.infrastructure.database import get_user_oauth_apps_collection
+
+        col = get_user_oauth_apps_collection()
+        result = []
+        async for app in col.find({"user_id": user_id, "revoked_at": None}):
+            result.append(
+                {
+                    "provider": app["provider"],
+                    "client_id": app["client_id"],
+                    "scopes": app.get("scopes", []),
+                    "created_at": app.get("created_at"),
+                    "updated_at": app.get("updated_at"),
+                    "connected": True,
+                }
+            )
+        return result
+
+    async def revoke_oauth_app(self, user_id: str, provider: str) -> bool:
+        """
+        Revoca (soft-delete) la OAuth app de un usuario Y revoca los tokens OAuth
+        asociados (las credenciales emitidas por esa app dejan de tener sentido).
+        """
+        from app.infrastructure.database import get_user_oauth_apps_collection
+
+        col = get_user_oauth_apps_collection()
+        result = await col.update_one(
+            {"user_id": user_id, "provider": provider, "revoked_at": None},
+            {"$set": {"revoked_at": datetime.now(timezone.utc)}},
+        )
+
+        if result.modified_count > 0:
+            # Revocar también los tokens emitidos con esta app.
+            await self.revoke(user_id, provider)
+            logger.info(f"OAuth app '{provider}' revocada para user {user_id}")
             return True
         return False
 
