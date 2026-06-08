@@ -333,7 +333,7 @@ async def agent_node(state: AgentState):
     """El Experto (Core o Custom) responde.
 
     Integra:
-    - Token budget enforcement (check_available antes, consume después).
+    - Cobro de créditos (CreditManager: reserva atómica + refund-on-error).
     - Agent resolver (overlay pattern: base + user overrides + USER_CONTEXT).
     - RAG multi-tenant.
     """

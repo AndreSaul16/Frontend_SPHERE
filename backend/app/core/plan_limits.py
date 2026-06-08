@@ -10,49 +10,58 @@ from app.core.auth import get_current_user
 from app.core.errors import ErrorCode, app_error
 
 
+# Modelo solo-créditos: existe un único plan ("free"). La monetización es 100%
+# por consumo de créditos, así que las entitlements de capacidad (RAG, agentes
+# custom, API) son uniformes y generosas para todos — no se gatean por tier
+# (no hay tiers). Mantenemos las claves starter/premium por compatibilidad con
+# documentos de usuario antiguos, pero ya no se asignan.
+
 # Cuota de RAG en bytes por plan.
 RAG_QUOTA_BYTES = {
-    "free": 20 * 1024 * 1024,        # 20 MB
-    "starter": 100 * 1024 * 1024,    # 100 MB
-    "premium": 1024 * 1024 * 1024,   # 1 GB
+    "free": 1024 * 1024 * 1024,      # 1 GB
+    "starter": 1024 * 1024 * 1024,
+    "premium": 1024 * 1024 * 1024,
 }
 
 # Máximo de agentes custom por plan.
 # 0 = no permite crear; -1 = ilimitado.
 MAX_CUSTOM_AGENTS = {
-    "free": 0,
-    "starter": 3,
+    "free": -1,
+    "starter": -1,
     "premium": -1,
 }
 
 # Planes que tienen acceso a la API.
-API_ACCESS_PLANS = {"premium"}
+API_ACCESS_PLANS = {"free", "starter", "premium"}
 
 # Rate limiting por plan: (requests, seconds) para chat/stream.
 RATE_LIMIT_CHAT_BY_PLAN = {
-    "free": (10, 60),
-    "starter": (30, 60),
+    "free": (60, 60),
+    "starter": (60, 60),
     "premium": (60, 60),
 }
 
 # Rate limiting general (billing, sessions, agents): (requests, seconds).
 RATE_LIMIT_GENERAL_BY_PLAN = {
-    "free": (30, 60),
-    "starter": (60, 60),
+    "free": (120, 60),
+    "starter": (120, 60),
     "premium": (120, 60),
 }
 
-# Top-ups permitidos por plan.
-# free → solo topup_free, starter → solo topup_starter,
-# premium → solo paquetes premium.
+# SKUs de créditos que cada usuario puede comprar. Con un único plan, todos
+# pueden comprar cualquier pack o top-up.
+PURCHASABLE_SKUS: set[str] = {
+    "executive",
+    "director",
+    "boardroom",
+    "quick_meeting",
+    "deep_dive",
+}
+
+# Compat: la validación cross-tier ya no restringe (un solo plan). Se conserva
+# la función validate_topup_tier abajo, que ahora valida contra PURCHASABLE_SKUS.
 ALLOWED_TOPUPS_BY_PLAN: dict[str, set[str]] = {
-    "free": {"topup_free"},
-    "starter": {"topup_starter"},
-    "premium": {
-        "topup_premium_1k",
-        "topup_premium_2k",
-        "topup_premium_10k",
-    },
+    "free": PURCHASABLE_SKUS,
 }
 
 
@@ -62,13 +71,13 @@ def get_user_plan(user: dict) -> str:
 
 
 def validate_topup_tier(user: dict, topup_plan_id: str) -> bool:
-    """Valida que el top-up solicitado corresponda al tier actual del usuario.
+    """Valida que el SKU de créditos solicitado sea comprable.
 
-    Returns True si está permitido.
+    Modelo solo-créditos: ya no hay restricción por tier (un único plan), así que
+    basta con que el SKU exista en el catálogo comprable. Se mantiene la firma
+    (recibe `user`) por compatibilidad con sus llamadores.
     """
-    plan_id = get_user_plan(user)
-    allowed = ALLOWED_TOPUPS_BY_PLAN.get(plan_id, ALLOWED_TOPUPS_BY_PLAN["free"])
-    return topup_plan_id in allowed
+    return topup_plan_id in PURCHASABLE_SKUS
 
 
 def get_plan_id(user: dict) -> str:

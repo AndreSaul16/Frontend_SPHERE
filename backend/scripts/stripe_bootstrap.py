@@ -6,9 +6,13 @@ Ejecuta:
     set STRIPE_SECRET_KEY=sk_test_xxx
     python scripts/stripe_bootstrap.py
 
-Crea los 7 productos/precios de SPHERE y te imprime los Price IDs listos
+Crea los 5 productos/precios de SPHERE y te imprime los Price IDs listos
 para pegar en .env. Idempotente: si un producto ya existe (mismo lookup_key),
 no lo duplica — devuelve el existente.
+
+Modelo solo-créditos: NO hay suscripciones. Todos los productos son one-time
+(recurring=False). El plan Free (50 créditos/mes) no se crea en Stripe — se
+otorga internamente. Lo de pago son packs de recarga + top-ups rápidos.
 """
 import os
 import sys
@@ -16,64 +20,50 @@ import sys
 import stripe
 
 
-# Productos y precios a crear. Todos en EUR.
+# Productos y precios a crear. Todos en EUR, todos one-time (sin suscripciones).
 # `lookup_key` permite que el script sea idempotente (Stripe deduplica por esto).
 PRODUCTS = [
+    # ── Packs de recarga ──
     {
-        "lookup_key": "sphere_starter_monthly",
-        "name": "SPHERE Starter",
-        "description": "1.000 mensajes Pro/mes + 100 MB RAG + 3 agentes custom.",
-        "price_eur_cents": 999,
-        "recurring": True,
-        "env_var": "STRIPE_PRICE_STARTER",
-    },
-    {
-        "lookup_key": "sphere_premium_monthly",
-        "name": "SPHERE Premium",
-        "description": "2.000 mensajes Pro/mes + 1 GB RAG + agentes ilimitados + API access.",
-        "price_eur_cents": 1999,
-        "recurring": True,
-        "env_var": "STRIPE_PRICE_PREMIUM",
-    },
-    {
-        "lookup_key": "sphere_topup_free_100",
-        "name": "Top-up 100 mensajes (Free)",
-        "description": "100 mensajes Pro adicionales. No caducan mientras la cuenta esté activa.",
-        "price_eur_cents": 499,
+        "lookup_key": "sphere_pack_executive",
+        "name": "SPHERE · Executive Pack",
+        "description": "150 créditos. Para seguir trabajando ese mismo día.",
+        "price_eur_cents": 3900,
         "recurring": False,
-        "env_var": "STRIPE_PRICE_TOPUP_FREE",
+        "env_var": "STRIPE_PRICE_EXECUTIVE",
     },
     {
-        "lookup_key": "sphere_topup_starter_700",
-        "name": "Top-up 700 mensajes (Starter)",
-        "description": "700 mensajes Pro adicionales. Solo planes Starter o Premium.",
-        "price_eur_cents": 599,
+        "lookup_key": "sphere_pack_director",
+        "name": "SPHERE · Director Pack",
+        "description": "500 créditos. El más popular: uso recurrente semanal.",
+        "price_eur_cents": 13900,
         "recurring": False,
-        "env_var": "STRIPE_PRICE_TOPUP_STARTER",
+        "env_var": "STRIPE_PRICE_DIRECTOR",
     },
     {
-        "lookup_key": "sphere_topup_premium_1k",
-        "name": "Top-up 1.000 mensajes (Premium)",
-        "description": "1.000 mensajes Pro adicionales. Solo plan Premium.",
+        "lookup_key": "sphere_pack_boardroom",
+        "name": "SPHERE · Boardroom Pack",
+        "description": "2.000 créditos. Uso intensivo de herramientas y board completo.",
+        "price_eur_cents": 55000,
+        "recurring": False,
+        "env_var": "STRIPE_PRICE_BOARDROOM",
+    },
+    # ── Top-ups rápidos ──
+    {
+        "lookup_key": "sphere_topup_quick_meeting",
+        "name": "SPHERE · Quick Meeting",
+        "description": "25 créditos. 5 interacciones extra con la Junta completa.",
         "price_eur_cents": 799,
         "recurring": False,
-        "env_var": "STRIPE_PRICE_TOPUP_PREMIUM_1K",
+        "env_var": "STRIPE_PRICE_QUICK_MEETING",
     },
     {
-        "lookup_key": "sphere_topup_premium_2k",
-        "name": "Top-up 2.000 mensajes (Premium)",
-        "description": "2.000 mensajes Pro adicionales. Solo plan Premium.",
+        "lookup_key": "sphere_topup_deep_dive",
+        "name": "SPHERE · Deep Dive",
+        "description": "50 créditos. Sesión intensiva: 10 interacciones con el board.",
         "price_eur_cents": 1499,
         "recurring": False,
-        "env_var": "STRIPE_PRICE_TOPUP_PREMIUM_2K",
-    },
-    {
-        "lookup_key": "sphere_topup_premium_10k",
-        "name": "Top-up 10.000 mensajes (Premium)",
-        "description": "10.000 mensajes Pro adicionales. Solo plan Premium.",
-        "price_eur_cents": 7499,
-        "recurring": False,
-        "env_var": "STRIPE_PRICE_TOPUP_PREMIUM_10K",
+        "env_var": "STRIPE_PRICE_DEEP_DIVE",
     },
 ]
 
@@ -144,9 +134,8 @@ def main():
     print("1. Pega los IDs anteriores en backend/.env (o el .env raíz).")
     print("2. Configura el webhook en https://dashboard.stripe.com/test/webhooks")
     print("   - URL: https://TU_DOMINIO/api/v1/webhooks/stripe")
-    print("   - Eventos: checkout.session.completed, invoice.payment_succeeded,")
-    print("              invoice.payment_failed, customer.subscription.updated,")
-    print("              customer.subscription.deleted")
+    print("   - Evento: checkout.session.completed")
+    print("     (modelo solo-créditos: no hay suscripciones que renovar/cancelar)")
     print("3. Copia el 'Signing secret' del webhook en STRIPE_WEBHOOK_SECRET.")
     print("4. Activa Stripe Tax para España (IVA 21%) en Settings → Tax.")
 

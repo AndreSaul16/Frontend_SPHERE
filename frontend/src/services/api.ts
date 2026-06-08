@@ -442,12 +442,6 @@ export interface UserProfile {
     personal_kb_enabled?: boolean;
     feature_flags?: string[];
     connected_providers?: string[];
-    usage?: {
-        token_budget_daily?: number;
-        tokens_used_today?: number;
-        tokens_reset_at?: string;
-        requests_in_current_window?: number;
-    };
 }
 
 export interface Integration {
@@ -529,7 +523,6 @@ export const profileService = {
         req<UserProfile>("/me", { method: "PATCH", json: updates }),
     completeOnboarding: () =>
         req<UserProfile>("/me/onboarding/complete", { method: "POST" }),
-    getUsage: () => req<UserProfile["usage"]>("/me/usage"),
     getStorage: () => req<StorageUsage>("/me/storage"),
 };
 

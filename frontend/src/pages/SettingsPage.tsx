@@ -8,18 +8,14 @@ import {
   Link2,
   Bot,
   Users as UsersIcon,
-  HardDrive,
   ArrowLeft,
-  Key,
   MessageSquare,
 } from "lucide-react";
 
 import { ProfileSettings } from "@/pages/settings/ProfileSettings";
-import { IntegrationsSettings } from "@/pages/settings/IntegrationsSettings";
+import { ConnectionsSettings } from "@/pages/settings/ConnectionsSettings";
 import { AgentOverridesSettings } from "@/pages/settings/AgentOverridesSettings";
 import { ContactsSettings } from "@/pages/settings/ContactsSettings";
-import { StorageSettings } from "@/pages/settings/StorageSettings";
-import { ServiceCredentialsSettings } from "@/pages/settings/ServiceCredentialsSettings";
 import { BoardMeetingSettings } from "@/pages/settings/BoardMeetingSettings";
 
 interface TabDef {
@@ -31,16 +27,25 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   { id: "profile", label: "Perfil", icon: <User className="h-4 w-4" />, render: () => <ProfileSettings /> },
-  { id: "integrations", label: "Integraciones", icon: <Link2 className="h-4 w-4" />, render: () => <IntegrationsSettings /> },
-  { id: "api-keys", label: "API Keys", icon: <Key className="h-4 w-4" />, render: () => <ServiceCredentialsSettings /> },
+  { id: "integrations", label: "Conexiones", icon: <Link2 className="h-4 w-4" />, render: () => <ConnectionsSettings /> },
   { id: "board-meeting", label: "Board Meeting", icon: <MessageSquare className="h-4 w-4" />, render: () => <BoardMeetingSettings /> },
   { id: "agent-overrides", label: "Agentes", icon: <Bot className="h-4 w-4" />, render: () => <AgentOverridesSettings /> },
   { id: "contacts", label: "Contactos", icon: <UsersIcon className="h-4 w-4" />, render: () => <ContactsSettings /> },
-  { id: "storage", label: "Uso & Storage", icon: <HardDrive className="h-4 w-4" />, render: () => <StorageSettings /> },
 ];
+
+// Redirects de secciones legacy ya fusionadas en otras páginas.
+const LEGACY_REDIRECTS: Record<string, string> = {
+  "api-keys": "/settings/integrations", // fusionada en Conexiones
+  storage: "/billing",                  // uso/almacenamiento ahora vive en Facturación
+};
 
 export function SettingsPage() {
   const { section } = useParams<{ section?: string }>();
+
+  if (section && LEGACY_REDIRECTS[section]) {
+    return <Navigate to={LEGACY_REDIRECTS[section]} replace />;
+  }
+
   const activeId = section || "profile";
   const active = TABS.find((t) => t.id === activeId);
 

@@ -28,12 +28,12 @@ async def create_checkout_session(
             "Los pagos no están disponibles en este momento. Inténtalo más tarde.",
         )
 
-    # Top-up tier validation: el plan_id solicitado debe corresponder al tier actual
-    if req.plan_id.startswith("topup_") and not validate_topup_tier(user, req.plan_id):
+    # Validación de catálogo: el SKU solicitado debe ser un pack/top-up comprable.
+    if not validate_topup_tier(user, req.plan_id):
         raise app_error(
             ErrorCode.BILLING_TOPUP_NOT_ALLOWED,
             403,
-            "Plan no disponible para tu tier.",
+            "Producto no disponible.",
             current_plan=get_user_plan(user),
             requested=req.plan_id,
         )

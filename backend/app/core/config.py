@@ -62,40 +62,46 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
 
     # Stripe (pagos)
+    # Modelo solo-créditos: Free (50 créditos/mes gratis) + compras puntuales de
+    # créditos (packs de recarga + top-ups). NO hay suscripciones de pago: todo lo
+    # de pago es one-time (mode=payment). Crea los productos en el dashboard Stripe
+    # con scripts/stripe_bootstrap.py y pega los Price IDs aquí.
     STRIPE_SECRET_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
-    STRIPE_PRICE_STARTER: str = ""
-    STRIPE_PRICE_PREMIUM: str = ""
-    STRIPE_PRICE_TOPUP_FREE: str = ""
-    STRIPE_PRICE_TOPUP_STARTER: str = ""
-    STRIPE_PRICE_TOPUP_PREMIUM_1K: str = ""
-    STRIPE_PRICE_TOPUP_PREMIUM_2K: str = ""
-    STRIPE_PRICE_TOPUP_PREMIUM_10K: str = ""
+    STRIPE_PRICE_EXECUTIVE: str = ""      # Executive Pack — 150 créditos — 39€
+    STRIPE_PRICE_DIRECTOR: str = ""       # Director Pack — 500 créditos — 139€
+    STRIPE_PRICE_BOARDROOM: str = ""      # Boardroom Pack — 2.000 créditos — 550€
+    STRIPE_PRICE_QUICK_MEETING: str = ""  # Quick Meeting — 25 créditos — 7,99€
+    STRIPE_PRICE_DEEP_DIVE: str = ""      # Deep Dive — 50 créditos — 14,99€
     FRONTEND_URL: str = "http://localhost:5173"
 
     @property
     def topup_messages_map(self) -> dict[str, int]:
-        """Mapeo plan_id -> mensajes que otorga ese top-up."""
+        """Mapeo SKU -> créditos que otorga esa compra puntual.
+
+        Modelo de créditos ponderados: 1 chat (1 agente) = 1 crédito;
+        1 board meeting = 5 créditos. Incluye packs de recarga (executive/
+        director/boardroom) y top-ups rápidos (quick_meeting/deep_dive). Todos
+        son one-time: suman a wallet.topup_messages_balance (no caducan)."""
         return {
-            "topup_free": 100,
-            "topup_starter": 700,
-            "topup_premium_1k": 1000,
-            "topup_premium_2k": 2000,
-            "topup_premium_10k": 10000,
+            # Packs de recarga
+            "executive": 150,
+            "director": 500,
+            "boardroom": 2000,
+            # Top-ups rápidos
+            "quick_meeting": 25,
+            "deep_dive": 50,
         }
 
     @property
     def plan_messages_map(self) -> dict[str, int]:
         """Mapeo plan_id -> créditos mensuales que otorga el plan.
 
-        Modelo de créditos ponderados: 1 chat (1 agente) = 1 crédito;
-        1 board meeting = 5 créditos. Free = 50 créditos (≈30-50 chats o ~10
-        board meetings) para enganchar sin disparar costes (≤$0.30/usuario/mes).
-        """
+        Solo existe el plan Free: 50 créditos/mes gratis (≈50 chats o ~10 board
+        meetings) para enganchar sin disparar costes (~7€/usuario = presupuesto
+        de marketing). Todo lo demás se compra como créditos puntuales."""
         return {
             "free": 50,
-            "starter": 600,
-            "premium": 1500,
         }
 
     @property

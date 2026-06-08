@@ -11,8 +11,6 @@ interface Props {
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",
-  starter: "Starter",
-  premium: "Premium",
 };
 
 export function CreditsIndicator({ className = "", refreshMs = 60_000 }: Props) {

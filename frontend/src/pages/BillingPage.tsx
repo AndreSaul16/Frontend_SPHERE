@@ -1,16 +1,41 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, Zap, Check, Sparkles, ArrowLeft, Loader2, ExternalLink } from 'lucide-react';
+import { CreditCard, Zap, Sparkles, ArrowLeft, Loader2, HardDrive, FileText, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useBillingStore } from '../store/useBillingStore';
-import { authHeaders } from '../services/api';
+import { authHeaders, profileService, type StorageUsage } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
-const PREMIUM_TOPUPS: Array<{ plan_id: string; label: string; price: string }> = [
-    { plan_id: 'topup_premium_1k', label: '1.000 msg', price: '€7.99' },
-    { plan_id: 'topup_premium_2k', label: '2.000 msg', price: '€14.99' },
-    { plan_id: 'topup_premium_10k', label: '10.000 msg', price: '€74.99' },
+/** Packs de recarga: compras puntuales de créditos (no caducan). */
+const PACKS: Array<{ id: string; name: string; credits: string; price: string; blurb: string; popular?: boolean }> = [
+    { id: 'executive', name: 'Executive Pack', credits: '150 créditos', price: '€39', blurb: 'Para seguir trabajando ese mismo día tras quedarte a medias.' },
+    { id: 'director', name: 'Director Pack', credits: '500 créditos', price: '€139', blurb: 'Uso recurrente durante la semana. El más popular.', popular: true },
+    { id: 'boardroom', name: 'Boardroom Pack', credits: '2.000 créditos', price: '€550', blurb: 'Uso intensivo de herramientas y board completo.' },
 ];
+
+/** Top-ups rápidos: compras pequeñas de impulso. */
+const TOPUPS: Array<{ id: string; name: string; credits: string; price: string; blurb: string }> = [
+    { id: 'quick_meeting', name: 'Quick Meeting', credits: '25 créditos', price: '€7,99', blurb: '5 interacciones extra con la Junta completa.' },
+    { id: 'deep_dive', name: 'Deep Dive', credits: '50 créditos', price: '€14,99', blurb: '10 interacciones con el board o una investigación con n8n.' },
+];
+
+function formatBytes(bytes: number): string {
+    if (!bytes || bytes < 1024) return `${bytes || 0} B`;
+    const units = ['KB', 'MB', 'GB', 'TB'];
+    let value = bytes / 1024;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i++;
+    }
+    return `${value.toFixed(value < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function barColor(pct: number): string {
+    if (pct >= 90) return 'bg-red-500';
+    if (pct >= 70) return 'bg-amber-500';
+    return 'bg-electric-cyan';
+}
 
 /** Extrae un mensaje de error legible de una respuesta HTTP fallida. */
 async function readErrorMessage(response: Response, fallback: string): Promise<string> {
@@ -45,12 +70,8 @@ const BillingSkeleton: React.FC = () => (
 
 export const BillingPage: React.FC = () => {
     const {
-        plan_id,
-        status,
         pro_messages_balance,
         topup_messages_balance,
-        current_period_end,
-        cancel_at_period_end,
         loaded,
         isLoading,
         error,
@@ -60,10 +81,11 @@ export const BillingPage: React.FC = () => {
 
     const [actionError, setActionError] = useState<string | null>(null);
     const [pendingPlan, setPendingPlan] = useState<string | null>(null);
-    const [portalLoading, setPortalLoading] = useState(false);
+    const [storage, setStorage] = useState<StorageUsage | null>(null);
 
     useEffect(() => {
         refresh();
+        profileService.getStorage().then(setStorage).catch(() => setStorage(null));
         // Si volvemos de Stripe (success=true), refrescamos varias veces
         // porque el webhook puede tardar unos segundos en procesar el pago.
         const params = new URLSearchParams(window.location.search);
@@ -103,32 +125,8 @@ export const BillingPage: React.FC = () => {
         }
     };
 
-    const handlePortal = async () => {
-        if (portalLoading) return;
-        setActionError(null);
-        setPortalLoading(true);
-        try {
-            const headers = await authHeaders();
-            const response = await fetch(`${API_URL}/billing/portal`, {
-                method: 'POST',
-                headers,
-            });
-            if (!response.ok) {
-                const msg = await readErrorMessage(response, 'No se pudo abrir la gestión de suscripción.');
-                setActionError(msg);
-                return;
-            }
-            const data = await response.json();
-            if (data.url) window.location.href = data.url;
-        } catch (err) {
-            console.error('Portal error:', err);
-            setActionError('Error de conexión al abrir el portal de suscripción.');
-        } finally {
-            setPortalLoading(false);
-        }
-    };
-
     const totalBalance = pro_messages_balance + topup_messages_balance;
+    const storagePct = storage?.percent_used ?? 0;
 
     // Loading state: skeleton mientras se obtienen los datos por primera vez
     if (isLoading && !loaded) {
@@ -163,7 +161,7 @@ export const BillingPage: React.FC = () => {
                 </Link>
                 <h1 className="text-base sm:text-xl font-bold text-text-primary flex items-center gap-2">
                     <CreditCard className="h-5 w-5 text-electric-cyan" />
-                    Facturación y Planes
+                    Créditos y Facturación
                 </h1>
             </div>
 
@@ -178,7 +176,7 @@ export const BillingPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* Error de acción (checkout/portal) */}
+                {/* Error de acción (checkout) */}
                 {actionError && (
                     <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 mb-8 flex items-center justify-between gap-3">
                         <p className="text-red-400 text-sm">{actionError}</p>
@@ -186,47 +184,21 @@ export const BillingPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* Resumen: Plan actual + Balance */}
+                {/* Resumen: Balance de créditos + Almacenamiento */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
-                    <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Sparkles className="h-4 w-4 text-luxury-purple" />
-                            <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Tu Plan Actual</h2>
-                        </div>
-                        <p className="text-4xl font-bold capitalize mb-2 text-text-primary">{plan_id}</p>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className={`h-2 w-2 rounded-full ${status === 'active' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                            <p className="text-sm text-text-secondary capitalize">{status}</p>
-                        </div>
-                        {current_period_end && (
-                            <p className="text-text-secondary text-sm mt-1">
-                                {cancel_at_period_end ? 'Acceso hasta' : 'Renueva el'}: {new Date(current_period_end).toLocaleDateString()}
-                            </p>
-                        )}
-                        {plan_id !== 'free' && (
-                            <button
-                                onClick={handlePortal}
-                                disabled={portalLoading}
-                                className="mt-4 w-full py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 rounded-xl transition-colors font-medium text-text-primary text-sm flex items-center justify-center gap-2 disabled:opacity-60"
-                            >
-                                {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                                Gestionar Suscripción
-                            </button>
-                        )}
-                    </div>
-
+                    {/* Balance */}
                     <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
                         <div className="flex items-center gap-2 mb-4">
                             <Zap className="h-4 w-4 text-electric-cyan" />
-                            <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Balance de Mensajes</h2>
+                            <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Tus Créditos</h2>
                         </div>
                         <div className="flex flex-col gap-3">
                             <div className="flex justify-between items-baseline">
-                                <span className="text-text-secondary text-sm">Mensajes del plan</span>
+                                <span className="text-text-secondary text-sm">Plan Free (50/mes)</span>
                                 <span className="text-2xl font-bold text-text-primary">{pro_messages_balance}</span>
                             </div>
                             <div className="flex justify-between items-baseline">
-                                <span className="text-text-secondary text-sm">Mensajes top-up</span>
+                                <span className="text-text-secondary text-sm">Comprados</span>
                                 <span className="text-2xl font-bold text-electric-cyan">{topup_messages_balance}</span>
                             </div>
                             <div className="border-t border-surface-highlight pt-3 flex justify-between items-baseline">
@@ -235,116 +207,107 @@ export const BillingPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {/* Planes y top-ups: solo si Stripe está configurado */}
-                {stripe_configured && (
-                    <>
-                        <h2 className="text-lg font-bold mb-1 text-text-primary">Planes</h2>
-                        <p className="text-xs text-text-secondary mb-6">
-                            1 mensaje a un agente = 1 crédito · 1 mensaje al Consejo (board meeting) = 5 créditos.
-                        </p>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
-                            {/* Free */}
-                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight flex flex-col">
-                                <h3 className="text-lg font-bold mb-2 text-text-primary">Free</h3>
-                                <p className="text-3xl font-bold mb-4 text-text-primary">€0<span className="text-sm text-text-secondary font-normal">/mes</span></p>
-                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 50 créditos/mes</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> ≈ 10 mensajes al Consejo</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 20 MB RAG</li>
-                                    <li className="flex items-center gap-2 opacity-50">Sin agentes custom</li>
-                                </ul>
-                                <button disabled className="w-full py-2.5 bg-surface-highlight/40 text-text-secondary rounded-xl cursor-not-allowed text-sm">
-                                    {plan_id === 'free' ? 'Plan Actual' : 'Tier base'}
-                                </button>
+                    {/* Almacenamiento de documentos (GridFS) */}
+                    <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <HardDrive className="h-4 w-4 text-luxury-purple" />
+                                <h2 className="text-xs uppercase tracking-widest font-mono text-text-secondary">Almacenamiento</h2>
                             </div>
-
-                            {/* Starter */}
-                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight flex flex-col">
-                                <h3 className="text-lg font-bold mb-2 text-text-primary">Starter</h3>
-                                <p className="text-3xl font-bold mb-4 text-text-primary">€9.99<span className="text-sm text-text-secondary font-normal">/mes</span></p>
-                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 600 créditos/mes</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 100 MB RAG</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 3 Agentes Custom</li>
-                                </ul>
-                                <button
-                                    onClick={() => handleCheckout('starter')}
-                                    disabled={plan_id === 'starter' || pendingPlan === 'starter'}
-                                    className="w-full py-2.5 bg-electric-cyan/10 text-electric-cyan border border-electric-cyan/30 hover:bg-electric-cyan hover:text-midnight disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all font-medium text-sm flex items-center justify-center gap-2"
-                                >
-                                    {pendingPlan === 'starter' && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    {plan_id === 'starter' ? 'Plan Actual' : 'Suscribirse'}
-                                </button>
-                            </div>
-
-                            {/* Premium */}
-                            <div className="glass-panel p-6 rounded-2xl border border-luxury-purple/50 flex flex-col relative overflow-hidden">
-                                <div className="absolute top-0 right-0 bg-luxury-purple text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-wide">RECOMENDADO</div>
-                                <h3 className="text-lg font-bold mb-2 text-text-primary">Premium</h3>
-                                <p className="text-3xl font-bold mb-4 text-text-primary">€19.99<span className="text-sm text-text-secondary font-normal">/mes</span></p>
-                                <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> 1.500 créditos/mes</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> 1 GB RAG</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> Agentes Custom Ilimitados</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-luxury-purple" /> API Access</li>
-                                </ul>
-                                <button
-                                    onClick={() => handleCheckout('premium')}
-                                    disabled={plan_id === 'premium' || pendingPlan === 'premium'}
-                                    className="w-full py-2.5 bg-luxury-purple text-white hover:bg-luxury-purple/80 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl transition-all font-medium text-sm flex items-center justify-center gap-2"
-                                >
-                                    {pendingPlan === 'premium' && <Loader2 className="h-4 w-4 animate-spin" />}
-                                    {plan_id === 'premium' ? 'Plan Actual' : 'Suscribirse'}
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => profileService.getStorage().then(setStorage).catch(() => {})}
+                                className="p-1.5 text-text-secondary hover:text-electric-cyan transition-colors"
+                                title="Actualizar"
+                            >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                            </button>
                         </div>
-
-                        <h2 className="text-lg font-bold mb-2 text-text-primary">Packs adicionales (top-ups)</h2>
-                        <p className="text-sm text-text-secondary mb-6">Mensajes extra que no caducan mientras tu cuenta esté activa.</p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
-                                <h3 className="text-base font-bold mb-1 text-text-primary">Free</h3>
-                                <p className="text-xs text-text-secondary mb-3">Disponible en cualquier plan</p>
-                                <button
-                                    onClick={() => handleCheckout('topup_free')}
-                                    disabled={pendingPlan === 'topup_free'}
-                                    className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
-                                >
-                                    <span>100 msg</span><span className="font-bold">€4.99</span>
-                                </button>
-                            </div>
-
-                            <div className="glass-panel p-6 rounded-2xl border border-surface-highlight">
-                                <h3 className="text-base font-bold mb-1 text-text-primary">Starter</h3>
-                                <p className="text-xs text-text-secondary mb-3">Requiere plan Starter o Premium</p>
-                                <button
-                                    onClick={() => handleCheckout('topup_starter')}
-                                    disabled={plan_id === 'free' || pendingPlan === 'topup_starter'}
-                                    className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
-                                >
-                                    <span>700 msg</span><span className="font-bold">€5.99</span>
-                                </button>
-                            </div>
-
-                            <div className="glass-panel p-6 rounded-2xl border border-luxury-purple/40">
-                                <h3 className="text-base font-bold mb-1 text-text-primary">Premium</h3>
-                                <p className="text-xs text-text-secondary mb-3">Requiere plan Premium</p>
-                                <div className="space-y-2">
-                                    {PREMIUM_TOPUPS.map((t) => (
-                                        <button
-                                            key={t.plan_id}
-                                            onClick={() => handleCheckout(t.plan_id)}
-                                            disabled={plan_id !== 'premium' || pendingPlan === t.plan_id}
-                                            className="w-full px-3 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl text-sm flex justify-between items-center text-text-primary transition-colors"
-                                        >
-                                            <span>{t.label}</span><span className="font-bold">{t.price}</span>
-                                        </button>
-                                    ))}
+                        {storage ? (
+                            <div className="space-y-3">
+                                <div className="flex items-end justify-between text-sm">
+                                    <span className="text-text-primary font-mono">
+                                        {formatBytes(storage.used_bytes)} <span className="text-text-secondary">/ {formatBytes(storage.quota_bytes)}</span>
+                                    </span>
+                                    <span className="text-text-secondary text-xs font-mono">{storagePct.toFixed(1)}%</span>
+                                </div>
+                                <div className="h-2.5 bg-midnight/50 rounded-full overflow-hidden border border-surface-highlight">
+                                    <div className={`h-full rounded-full transition-all ${barColor(storagePct)}`} style={{ width: `${storagePct}%` }} />
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-text-secondary">
+                                    <FileText className="h-3.5 w-3.5" />
+                                    {storage.file_count} {storage.file_count === 1 ? 'documento' : 'documentos'} en tus agentes
                                 </div>
                             </div>
+                        ) : (
+                            <p className="text-xs text-text-secondary">No se pudo obtener el uso de almacenamiento.</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Catálogo: solo si Stripe está configurado */}
+                {stripe_configured && (
+                    <>
+                        <h2 className="text-lg font-bold mb-1 text-text-primary">Packs de recarga</h2>
+                        <p className="text-xs text-text-secondary mb-6">
+                            1 mensaje a un agente = 1 crédito · 1 mensaje al Consejo (board meeting) = 5 créditos. Los créditos comprados no caducan.
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
+                            {PACKS.map((pack) => (
+                                <div
+                                    key={pack.id}
+                                    className={`glass-panel p-6 rounded-2xl border flex flex-col relative overflow-hidden ${
+                                        pack.popular ? 'border-luxury-purple/50' : 'border-surface-highlight'
+                                    }`}
+                                >
+                                    {pack.popular && (
+                                        <div className="absolute top-0 right-0 bg-luxury-purple text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg tracking-wide">
+                                            POPULAR
+                                        </div>
+                                    )}
+                                    <h3 className="text-lg font-bold mb-1 text-text-primary">{pack.name}</h3>
+                                    <p className="text-sm text-electric-cyan font-medium mb-2">{pack.credits}</p>
+                                    <p className="text-3xl font-bold mb-3 text-text-primary">{pack.price}</p>
+                                    <p className="text-text-secondary text-sm mb-8 flex-1">{pack.blurb}</p>
+                                    <button
+                                        onClick={() => handleCheckout(pack.id)}
+                                        disabled={pendingPlan === pack.id}
+                                        className={`w-full py-2.5 rounded-xl transition-all font-medium text-sm flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                            pack.popular
+                                                ? 'bg-luxury-purple text-white hover:bg-luxury-purple/80'
+                                                : 'bg-electric-cyan/10 text-electric-cyan border border-electric-cyan/30 hover:bg-electric-cyan hover:text-midnight'
+                                        }`}
+                                    >
+                                        {pendingPlan === pack.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                                        Comprar
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+
+                        <h2 className="text-lg font-bold mb-2 text-text-primary flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-electric-cyan" />
+                            Top-ups rápidos
+                        </h2>
+                        <p className="text-sm text-text-secondary mb-6">Recargas pequeñas para cuando solo necesitas un empujón.</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            {TOPUPS.map((t) => (
+                                <div key={t.id} className="glass-panel p-6 rounded-2xl border border-surface-highlight flex items-center justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-base font-bold text-text-primary">{t.name}</h3>
+                                        <p className="text-sm text-electric-cyan font-medium">{t.credits}</p>
+                                        <p className="text-xs text-text-secondary mt-1">{t.blurb}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleCheckout(t.id)}
+                                        disabled={pendingPlan === t.id}
+                                        className="shrink-0 px-4 py-2.5 bg-surface-highlight hover:bg-surface-highlight/70 disabled:opacity-50 rounded-xl text-sm font-bold flex items-center gap-2 text-text-primary transition-colors"
+                                    >
+                                        {pendingPlan === t.id && <Loader2 className="h-4 w-4 animate-spin" />}
+                                        {t.price}
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     </>
                 )}
