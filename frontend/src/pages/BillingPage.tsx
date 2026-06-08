@@ -242,7 +242,7 @@ export const BillingPage: React.FC = () => {
                     <>
                         <h2 className="text-lg font-bold mb-1 text-text-primary">Planes</h2>
                         <p className="text-xs text-text-secondary mb-6">
-                            1 chat con un agente = 1 crédito · 1 reunión de Consejo (board meeting) = 5 créditos.
+                            1 mensaje a un agente = 1 crédito · 1 mensaje al Consejo (board meeting) = 5 créditos.
                         </p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-12">
                             {/* Free */}
@@ -251,7 +251,7 @@ export const BillingPage: React.FC = () => {
                                 <p className="text-3xl font-bold mb-4 text-text-primary">€0<span className="text-sm text-text-secondary font-normal">/mes</span></p>
                                 <ul className="text-text-secondary text-sm space-y-2 mb-8 flex-1">
                                     <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 50 créditos/mes</li>
-                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> ≈ 10 reuniones de Consejo</li>
+                                    <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> ≈ 10 mensajes al Consejo</li>
                                     <li className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-500" /> 20 MB RAG</li>
                                     <li className="flex items-center gap-2 opacity-50">Sin agentes custom</li>
                                 </ul>
