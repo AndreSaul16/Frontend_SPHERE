@@ -448,6 +448,21 @@ export interface IntegrationsList {
     status: Record<string, boolean>;
 }
 
+export interface OAuthAppInfo {
+    provider: string;
+    client_id: string;
+    scopes?: string[];
+    created_at?: string;
+    updated_at?: string;
+    connected: boolean;
+}
+
+export interface OAuthAppsList {
+    apps: OAuthAppInfo[];
+    available: string[];
+    callback_urls: Record<string, string>;
+}
+
 export interface Contact {
     _id?: string;
     type: "email" | "phone" | "slack_channel" | "github_user" | "linkedin_handle";
@@ -514,6 +529,16 @@ export const integrationsService = {
     },
     disconnect: (provider: string) =>
         req<void>(`/integrations/${provider}`, { method: "DELETE" }),
+
+    // BYO OAuth apps: el usuario registra su propia app (client_id + secret).
+    listApps: () => req<OAuthAppsList>("/integrations/apps"),
+    registerApp: (provider: string, client_id: string, client_secret: string) =>
+        req<{ status: string; provider: string; callback_url: string; scopes: string[] }>(
+            `/integrations/${provider}/app`,
+            { method: "PUT", json: { client_id, client_secret } }
+        ),
+    deleteApp: (provider: string) =>
+        req<void>(`/integrations/${provider}/app`, { method: "DELETE" }),
 };
 
 export const contactsService = {
