@@ -51,11 +51,13 @@ def _validate_env_vars():
         "MONGODB_URL": settings.MONGODB_URL,
     }
 
-    # Críticas SOLO en producción
+    # Críticas SOLO en producción.
+    # Firebase NO va aquí: se valida aparte porque acepta credenciales por archivo
+    # (FIREBASE_CREDENTIALS_PATH) O por contenido JSON (FIREBASE_CREDENTIALS_JSON,
+    # que es lo que se usa en Railway). Exigir solo el PATH crasheaba el arranque.
     prod_critical = {
         "OPENAI_API_KEY": settings.OPENAI_API_KEY,
         "DEEPSEEK_API_KEY": settings.DEEPSEEK_API_KEY,
-        "FIREBASE_CREDENTIALS_PATH": settings.FIREBASE_CREDENTIALS_PATH,
         "FERNET_KEY": settings.FERNET_KEY,
         "REDIS_URL": settings.REDIS_URL,
     }
@@ -78,6 +80,9 @@ def _validate_env_vars():
         )
 
     missing_prod = [k for k, v in prod_critical.items() if not v]
+    # Firebase: vale FIREBASE_CREDENTIALS_JSON (Railway) o FIREBASE_CREDENTIALS_PATH (archivo).
+    if not (settings.FIREBASE_CREDENTIALS_JSON or settings.FIREBASE_CREDENTIALS_PATH):
+        missing_prod.append("FIREBASE_CREDENTIALS_JSON|FIREBASE_CREDENTIALS_PATH")
     if missing_prod:
         if settings.is_production:
             raise RuntimeError(
