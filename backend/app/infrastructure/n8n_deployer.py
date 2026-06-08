@@ -12,6 +12,8 @@ El usuario NUNCA toca n8n. Solo configura API keys en SPHERE.
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +21,18 @@ import httpx
 
 from app.core.config import settings
 from app.core.logger import api_logger as logger
+
+# Campos que la API pública de n8n acepta al crear/actualizar un workflow.
+# El resto (id, active, tags, versionId, pinData, meta, triggerCount,
+# createdAt, updatedAt, shared...) son read-only y devuelven 400 si se envían.
+_WORKFLOW_WRITABLE_FIELDS = ("name", "nodes", "connections", "settings", "staticData")
+
+# Lock entre procesos: uvicorn corre con varios workers y cada uno ejecuta el
+# lifespan; sin esto, los N workers crearían N copias de cada workflow (los
+# nombres NO son únicos en n8n). El primer worker que crea el fichero gana y
+# despliega; el resto hace no-op. El lock vive en el FS efímero del contenedor,
+# así que cada redeploy (contenedor nuevo) empieza limpio.
+_DEPLOY_LOCK_PATH = os.path.join(tempfile.gettempdir(), "sphere_n8n_deploy.lock")
 
 # Directorio donde están los workflow JSON.
 # Este módulo vive en backend/app/infrastructure/, así que parents[2] == backend/.
@@ -90,11 +104,11 @@ class N8NDeployer:
     async def create_workflow(self, workflow_data: dict) -> Optional[dict]:
         """Crea un nuevo workflow en n8n."""
         try:
-            # Remover campos que n8n genera automáticamente
+            # Solo los campos escribibles: la API rechaza tags/versionId/active/etc.
             clean_data = {
-                k: v
-                for k, v in workflow_data.items()
-                if k not in ["id", "createdAt", "updatedAt"]
+                k: workflow_data[k]
+                for k in _WORKFLOW_WRITABLE_FIELDS
+                if k in workflow_data
             }
             result = await self._request("POST", "/api/v1/workflows", json=clean_data)
             logger.info(f"✅ Workflow creado: {workflow_data.get('name', 'unknown')}")
@@ -109,9 +123,9 @@ class N8NDeployer:
         """Actualiza un workflow existente."""
         try:
             clean_data = {
-                k: v
-                for k, v in workflow_data.items()
-                if k not in ["id", "createdAt", "updatedAt"]
+                k: workflow_data[k]
+                for k in _WORKFLOW_WRITABLE_FIELDS
+                if k in workflow_data
             }
             result = await self._request(
                 "PUT", f"/api/v1/workflows/{workflow_id}", json=clean_data
@@ -126,9 +140,11 @@ class N8NDeployer:
 
     async def activate_workflow(self, workflow_id: str) -> bool:
         """Activa un workflow."""
+        # La API pública de n8n usa un endpoint dedicado; `active` es read-only
+        # en POST/PUT, así que no se puede activar por PATCH del campo.
         try:
             await self._request(
-                "PATCH", f"/api/v1/workflows/{workflow_id}", json={"active": True}
+                "POST", f"/api/v1/workflows/{workflow_id}/activate"
             )
             logger.info(f"✅ Workflow activado: {workflow_id}")
             return True
@@ -140,7 +156,7 @@ class N8NDeployer:
         """Desactiva un workflow."""
         try:
             await self._request(
-                "PATCH", f"/api/v1/workflows/{workflow_id}", json={"active": False}
+                "POST", f"/api/v1/workflows/{workflow_id}/deactivate"
             )
             return True
         except Exception:
@@ -175,6 +191,17 @@ async def deploy_all_workflows():
     workflow_files = list(WORKFLOWS_DIR.glob("*.json"))
     if not workflow_files:
         logger.warning("⚠️ No se encontraron archivos de workflow en n8n-workflows/")
+        return
+
+    # Lock entre workers: solo uno despliega (ver _DEPLOY_LOCK_PATH). El resto
+    # hace no-op para no crear copias duplicadas de cada workflow.
+    try:
+        fd = os.open(_DEPLOY_LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        logger.info(
+            "⏭️ Otro worker ya está desplegando los workflows de n8n; este los omite."
+        )
         return
 
     logger.info(f"📦 Deployando {len(workflow_files)} workflows a n8n...")
