@@ -118,9 +118,31 @@ Cuando "el deploy no sale", **siempre** es uno de estos tres. El truco es saber
   expande.
 - **Cómo se diagnostica:** el backend ahora imprime un **banner FATAL** que nombra
   la fase de arranque que petó (`env` / `mongodb` / `firebase` / ...) — ver §5.
-  Los runtime logs se ven en el dashboard o con `railway logs`.
-- **Estado actual:** el servicio `n8n` está `CRASHED` (le faltan vars de runtime;
-  pendiente de terminar su setup). No afecta al backend ni al frontend.
+  Los runtime logs se ven en el dashboard o con `railway logs` (o, por API,
+  `deploymentLogs(deploymentId)` — que es donde sale el error de runtime, NO
+  `buildLogs`).
+- **Incidente real (n8n, 2026-06-08):** `CRASHED` con
+  `Error: EACCES: permission denied, open '/home/node/.n8n/config'` en los
+  *runtime logs*. El Railway Volume montado en `/home/node/.n8n` pertenece a
+  `root`, pero la imagen `n8nio/n8n` corre como el usuario `node` → no puede
+  escribir su config. **Fix:** poner `RAILWAY_RUN_UID=0` (el contenedor corre como
+  root y puede escribir el volumen) + `N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false`
+  (n8n no aborta por los permisos del config al correr como root). RESUELTO.
+
+### Modo D — 502 (compiló, arrancó, pero el edge no enruta)  ← incidente real 2026-06-08
+- **Síntoma:** el deploy está en `SUCCESS` y los **runtime logs dicen que el
+  servidor escucha** (`Editor is now accessible via: https://...`), pero la URL
+  pública devuelve **HTTP 502** de forma persistente (no es un cold-start).
+- **Causa:** el dominio público del servicio tiene **`targetPort: null`**.
+  Railway intenta autodetectar el puerto del contenedor; si la app **no escucha en
+  el `PORT` que Railway inyecta** (n8n usa su propio `N8N_PORT=5678` e ignora
+  `PORT`), la autodetección falla y el proxy no sabe a qué puerto enrutar → 502.
+- **Fix aplicado (n8n):** fijar el `targetPort` del dominio a **5678** vía
+  `serviceDomainUpdate` (cambio de proxy en el edge; aplica en segundos, **sin
+  redeploy**). Comprobar con `domains(projectId,environmentId,serviceId){
+  serviceDomains{ id domain targetPort } }`.
+- **Regla general:** para servicios por **imagen** que escuchan en un puerto fijo
+  (no en `PORT`), hay que **fijar el `targetPort` del dominio** explícitamente.
 
 ---
 
@@ -171,6 +193,24 @@ mutation($serviceId:String!,$environmentId:String!,$input:ServiceInstanceUpdateI
   serviceInstanceUpdate(serviceId:$serviceId, environmentId:$environmentId, input:$input)
 }
 # variables.input = { "rootDirectory":"backend", "railwayConfigFile":"backend/railway.toml" }
+```
+
+Setear/actualizar una variable de entorno (dispara redeploy en build-services):
+```graphql
+mutation($input:VariableUpsertInput!){ variableUpsert(input:$input) }
+# input = { projectId, environmentId, serviceId, name, value }
+```
+
+Fijar el puerto destino del dominio (arregla el 502 del modo D). OJO: `domain` es
+obligatorio (NON_NULL) en el input, hay que reenviarlo:
+```graphql
+mutation($input:ServiceDomainUpdateInput!){ serviceDomainUpdate(input:$input) }
+# input = { serviceDomainId, domain, environmentId, serviceId, targetPort:5678 }
+```
+
+Forzar un redeploy del último build de un servicio:
+```graphql
+mutation($sid:String!,$eid:String!){ serviceInstanceRedeploy(serviceId:$sid, environmentId:$eid) }
 ```
 
 IDs del proyecto SPHERE (entorno `production`):

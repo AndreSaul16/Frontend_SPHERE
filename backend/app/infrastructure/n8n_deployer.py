@@ -20,8 +20,13 @@ import httpx
 from app.core.config import settings
 from app.core.logger import api_logger as logger
 
-# Directorio donde están los workflow JSON
-WORKFLOWS_DIR = Path(__file__).parents[2] / "n8n-workflows"
+# Directorio donde están los workflow JSON.
+# Este módulo vive en backend/app/infrastructure/, así que parents[2] == backend/.
+# Los JSON están en backend/infrastructure/n8n-workflows/ (NO en backend/app/...).
+# En el contenedor (WORKDIR /app, rootDirectory=backend) esto resuelve a
+# /app/infrastructure/n8n-workflows. Antes apuntaba a parents[2]/n8n-workflows
+# (= backend/n8n-workflows), que no existe → 0 workflows importados.
+WORKFLOWS_DIR = Path(__file__).parents[2] / "infrastructure" / "n8n-workflows"
 
 
 class N8NDeployer:
