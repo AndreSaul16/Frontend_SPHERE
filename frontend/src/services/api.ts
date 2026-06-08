@@ -37,6 +37,12 @@ export async function authHeaders(): Promise<Record<string, string>> {
 export interface StreamCallbacks {
     onToken: (content: string) => void;
     onRole: (role: string) => void;
+    // BOARD MEETING: inicio del debate multi-agente (sirve de confirmación visual)
+    onBoardStart?: (data: { agents: string[]; iterations: number | string }) => void;
+    // BOARD MEETING: cada agente que empieza a hablar (CEO → CTO → CFO → CMO → conclusión)
+    onBoardAgent?: (data: { role: string; is_conclusion: boolean }) => void;
+    // THINKING: línea de razonamiento (reasoning_content) del modelo, en streaming
+    onThinking?: (content: string) => void;
     // ARTIFACTS 2.0 STREAMING: 3-event protocol for live artifact rendering
     onArtifactOpen?: (data: { title: string; artifact_type: string; language: string }) => void;
     onArtifactChunk?: (content: string) => void;
@@ -138,6 +144,15 @@ export const chatService = {
                             callbacks.onToken(data.content);
                         } else if (data.type === 'meta' && data.role) {
                             callbacks.onRole(data.role);
+                        } else if (data.type === 'board_start') {
+                            callbacks.onBoardStart?.({
+                                agents: Array.isArray(data.agents) ? data.agents : ['CEO', 'CTO', 'CFO', 'CMO'],
+                                iterations: data.iterations ?? 'auto',
+                            });
+                        } else if (data.type === 'board_agent' && typeof data.role === 'string') {
+                            callbacks.onBoardAgent?.({ role: data.role, is_conclusion: !!data.is_conclusion });
+                        } else if (data.type === 'thinking' && typeof data.content === 'string') {
+                            callbacks.onThinking?.(data.content);
                         } else if (data.type === 'artifact_open') {
                             callbacks.onArtifactOpen?.({
                                 title: data.title || 'untitled',

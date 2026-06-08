@@ -3,8 +3,8 @@ import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize from 'rehype-sanitize';
 import 'highlight.js/styles/atom-one-dark.css';
-import { motion } from 'framer-motion';
-import { Copy, Check, RefreshCw, Pin, ThumbsUp, ThumbsDown, Trash2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Copy, Check, RefreshCw, Pin, ThumbsUp, ThumbsDown, Trash2, Brain, ChevronDown } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import type { Message, Agent } from "@/types";
 import { ArtifactCard } from './ArtifactCard';
@@ -27,6 +27,78 @@ interface MessageBubbleProps {
     onRate?: (rating: 'up' | 'down') => void;
     onEdit?: (newContent: string) => void;
     onDelete?: () => void;
+}
+
+/**
+ * Bloque de "pensamiento" (chain-of-thought) estilo DeepSeek/Claude.
+ * - Si hay razonamiento real (reasoning_content): se muestra colapsable,
+ *   auto-expandido mientras razona y auto-colapsado cuando llega la respuesta.
+ * - Fallback sintético: si aún no hay razonamiento ni contenido pero está
+ *   streameando, muestra un "Pensando…" animado para no dejar la burbuja muda.
+ */
+function ThinkingBlock({ thinking, isStreaming, hasContent, hexColor }: {
+    thinking?: string;
+    isStreaming: boolean;
+    hasContent: boolean;
+    hexColor: string;
+}) {
+    const [userToggled, setUserToggled] = useState(false);
+    const [open, setOpen] = useState(false);
+
+    const isThinkingNow = isStreaming && !hasContent;
+    const hasThinking = !!(thinking && thinking.trim());
+
+    if (!hasThinking) {
+        if (isThinkingNow) {
+            return (
+                <div className="flex items-center gap-2 mb-2 text-[11px] text-text-secondary/70 italic">
+                    <Brain className="h-3 w-3 animate-pulse" style={{ color: hexColor }} />
+                    <span>Pensando</span>
+                    <span className="inline-flex gap-0.5">
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }}>.</motion.span>
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }}>.</motion.span>
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.4 }}>.</motion.span>
+                    </span>
+                </div>
+            );
+        }
+        return null;
+    }
+
+    // Sin interacción del usuario: expandido mientras razona, colapsado al terminar.
+    const expanded = userToggled ? open : isThinkingNow;
+
+    return (
+        <div className="mb-2">
+            <button
+                type="button"
+                onClick={() => { setUserToggled(true); setOpen(!expanded); }}
+                className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-text-secondary/70 hover:text-text-secondary transition-colors"
+            >
+                <Brain className="h-3 w-3" style={{ color: hexColor }} />
+                <span>{isThinkingNow ? 'Razonando…' : 'Razonamiento'}</span>
+                <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} />
+            </button>
+            <AnimatePresence initial={false}>
+                {expanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                    >
+                        <div
+                            className="mt-1.5 pl-3 border-l-2 text-[12px] leading-relaxed text-text-secondary/80 italic whitespace-pre-wrap [overflow-wrap:break-word]"
+                            style={{ borderColor: `${hexColor}40` }}
+                        >
+                            {thinking}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
 }
 
 export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyping, isLast, isPinned, rating, onRegenerate, onPin, onRate, onDelete }: MessageBubbleProps) {
@@ -132,7 +204,22 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                         >
                             <span className="h-1 w-1 rounded-full bg-current animate-pulse" />
                             {agent ? agent.name.split(' ')[0] : (message.role && !['user', 'system'].includes(message.role) ? message.role : 'SPHERE')}
+                            {message.isConclusion && (
+                                <span className="px-1.5 py-0.5 rounded bg-current/10 text-current text-[8px] tracking-wider not-italic">
+                                    · CONCLUSIÓN
+                                </span>
+                            )}
                         </motion.div>
+                    )}
+
+                    {/* Línea de pensamiento (chain-of-thought) antes de la respuesta */}
+                    {!isUser && (
+                        <ThinkingBlock
+                            thinking={message.thinking}
+                            isStreaming={!!isTyping && !!isLast}
+                            hasContent={!!message.content.trim()}
+                            hexColor={activeHexColor}
+                        />
                     )}
 
                     <div className="prose prose-invert prose-sm max-w-none break-words leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0">

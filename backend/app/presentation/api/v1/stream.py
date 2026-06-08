@@ -99,17 +99,50 @@ async def generate_chat_events(
         artifact_buffer = ""
         is_inside_artifact = False
         current_board_agent = None  # Track which agent is speaking in board mode
+        # Nodos del board workflow → rol que habla. Incluye "conclusion" (CEO),
+        # que el filtro antiguo ('board' in node_name) NO detectaba (bug).
+        BOARD_NODE_ROLES = {
+            "ceo_board": "CEO",
+            "cto_board": "CTO",
+            "cfo_board": "CFO",
+            "cmo_board": "CMO",
+            "conclusion": "CEO",
+        }
         # Token cap tracking: accumulate tokens from on_chat_model_end events
         # to call aadjust_after_completion after the stream completes.
         total_tokens_in = 0
         total_tokens_out = 0
+
+        # Señal de inicio para la UI: ¿es un Board Meeting? Si la UI NO recibe
+        # 'board_start', el board no se activó (diagnóstico claro). Además da el
+        # "X entró al grupo" estilo WhatsApp.
+        if board_mode:
+            try:
+                yield f"data: {json.dumps({'type': 'board_start', 'agents': ['CEO', 'CTO', 'CFO', 'CMO'], 'iterations': board_iterations or 'auto'})}\n\n"
+            except Exception as exc:
+                logger.debug(f"No se pudo emitir board_start: {exc}")
 
         async for event in active_orchestrator.astream_events(
             initial_state, config=config, version="v1"
         ):
             kind = event["event"]
 
-            # --- A. DETECCIÓN DE ROL (Router / Board Classifier) ---
+            # --- A0. INICIO DE NODO BOARD: marcar quién EMPIEZA a hablar ---
+            # Usamos on_chain_start (no on_chain_end) para que el marcador del
+            # agente llegue ANTES de sus tokens; con on_chain_end llegaba tarde
+            # (tras emitir ya su respuesta). Dedup por rol evita doble emisión.
+            if kind == "on_chain_start":
+                try:
+                    node_name = event.get("name", "")
+                    role = BOARD_NODE_ROLES.get(node_name)
+                    if role and role != current_board_agent:
+                        current_board_agent = role
+                        logger.debug(f"Board meeting: {role} empieza a hablar ({node_name})")
+                        yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
+                except Exception as exc:
+                    logger.debug(f"on_chain_start board marker falló: {exc}")
+
+            # --- A. DETECCIÓN DE ROL (Router / fallback board) ---
             if kind == "on_chain_end":
                 node_name = event.get("name", "")
 
@@ -121,21 +154,13 @@ async def generate_chat_events(
                         logger.debug(f"Router detectó agente: {role}")
                         yield f"data: {json.dumps({'type': 'meta', 'role': role})}\n\n"
 
-                # Board mode: detect which board agent is starting
-                if "board" in node_name and node_name != "classifier":
-                    # Extract role from node name (e.g., "ceo_board" → "CEO")
-                    role_map = {
-                        "ceo_board": "CEO",
-                        "cto_board": "CTO",
-                        "cfo_board": "CFO",
-                        "cmo_board": "CMO",
-                        "conclusion": "CEO",
-                    }
-                    role = role_map.get(node_name)
-                    if role and role != current_board_agent:
-                        current_board_agent = role
-                        logger.debug(f"Board meeting: {role} hablando")
-                        yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
+                # Fallback: si por algún motivo no llegó on_chain_start del nodo
+                # board, lo marcamos al cerrar. El dedup por rol garantiza que no
+                # se emita dos veces cuando on_chain_start sí llegó.
+                board_role = BOARD_NODE_ROLES.get(node_name)
+                if board_role and board_role != current_board_agent:
+                    current_board_agent = board_role
+                    yield f"data: {json.dumps({'type': 'board_agent', 'role': board_role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
 
             # --- A2. CHAT MODEL END — acumular tokens para ajuste post-stream ---
             if kind == "on_chat_model_end":
@@ -164,7 +189,28 @@ async def generate_chat_events(
             # --- C. STREAMING DE TOKENS ---
             if kind == "on_chat_model_stream":
                 chunk = event.get("data", {}).get("chunk")
-                if chunk and hasattr(chunk, "content"):
+                if chunk is None:
+                    continue
+
+                # --- C0. RAZONAMIENTO (chain-of-thought de modelos reasoning) ---
+                # DeepSeek (deepseek-v4-pro) emite el razonamiento en
+                # additional_kwargs.reasoning_content, SEPARADO de content. Mientras
+                # el modelo "piensa", content viene vacío y antes lo descartábamos.
+                # Lo capturamos y lo emitimos como evento 'thinking' para la UI.
+                try:
+                    ak = getattr(chunk, "additional_kwargs", None)
+                    reasoning_piece = (
+                        (ak.get("reasoning_content") or ak.get("reasoning"))
+                        if isinstance(ak, dict)
+                        else None
+                    )
+                    if reasoning_piece:
+                        yield f"data: {json.dumps({'type': 'thinking', 'role': current_board_agent, 'content': reasoning_piece})}\n\n"
+                        continue
+                except Exception as exc:
+                    logger.debug(f"No se pudo extraer reasoning_content: {exc}")
+
+                if hasattr(chunk, "content"):
                     content = chunk.content
                     if not content:
                         continue
@@ -403,10 +449,24 @@ async def chat_stream_endpoint(
         board_iterations = None
 
         if not final_target_role and session_doc:
+            # Detección ROBUSTA de sesión de grupo: no dependemos solo de `type`,
+            # porque sesiones antiguas pueden no tenerlo (→ default "direct" y el
+            # board nunca se disparaba). También la inferimos por base_agent_id
+            # ('group-chat'/'system') o por tener >1 miembro.
             session_type = session_doc.get("type", "direct")
-            if session_type == "group":
+            session_members = session_doc.get("members") or []
+            session_base = session_doc.get("base_agent_id")
+            is_group = (
+                session_type == "group"
+                or session_base in ("group-chat", "system")
+                or len(session_members) > 1
+            )
+            if is_group:
                 final_target_role = None
-                logger.debug("Sesión GROUP detectada: router clasificará la consulta")
+                logger.info(
+                    f"Sesión GROUP detectada (type={session_type}, base={session_base}, "
+                    f"members={len(session_members)}): clasificará router/board"
+                )
 
                 # Board meeting habilitado para este usuario?
                 users_col = get_users_collection()
@@ -422,8 +482,14 @@ async def chat_stream_endpoint(
                     if isinstance(pref, int) and pref >= 1:
                         board_iterations = min(pref, 2)
                     logger.info(
-                        f"Board Meeting activado para user {user_id} "
+                        f"✅ Board Meeting ACTIVADO para user {user_id} "
                         f"(iteraciones={board_iterations or 'auto'})"
+                    )
+                else:
+                    enabled_val = user_doc.get("board_meeting_enabled") if user_doc else "sin-doc-usuario"
+                    logger.info(
+                        f"⚠️ Sesión GROUP pero Board Meeting DESACTIVADO para {user_id} "
+                        f"(board_meeting_enabled={enabled_val}) → responde un solo agente"
                     )
             else:
                 agent_ref_type = session_doc.get("agent_ref_type", "core")

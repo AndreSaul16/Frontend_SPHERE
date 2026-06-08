@@ -524,16 +524,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
         try {
             const selectedAgent = allAgents.find(a => a.id === selectedAgentId);
+            const isGroup = selectedAgentId === 'group-chat';
             const targetRole: Role | undefined =
-                (selectedAgentId === 'group-chat' || !selectedAgent) ? undefined : selectedAgent?.role;
+                (isGroup || !selectedAgent) ? undefined : selectedAgent?.role;
 
+            // Placeholder inicial. En grupo arrancamos como "CEO" (el board siempre
+            // abre con el CEO) para no mostrar una burbuja de sistema vacía mientras
+            // el clasificador decide; board_agent / onRole la reetiquetan al instante.
+            // activeBotMsgId es mutable: en board, cada agente abre su propia burbuja.
             const botMsgId = uuidv4();
+            let activeBotMsgId = botMsgId;
             const botMsg: Message = {
                 id: botMsgId,
-                role: (targetRole || 'system') as Role,
+                role: (targetRole || (isGroup ? 'CEO' : 'system')) as Role,
                 content: '',
                 timestamp: new Date(),
-                agentId: selectedAgentId || undefined,
+                agentId: isGroup ? 'ceo-1' : (selectedAgentId || undefined),
             };
 
             set((state) => ({
@@ -559,7 +565,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, content: msg.content + token }
                                         : msg
                                 ),
@@ -573,12 +579,101 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, role: role as Role, agentId: matchingAgent?.id || msg.agentId }
                                         : msg
                                 ),
                             },
                         }));
+                    },
+                    onBoardStart: (data) => {
+                        // Confirmación visual de que el Board Meeting se disparó.
+                        // Insertamos una nota de sistema JUSTO ANTES de la burbuja
+                        // activa (estilo "X entró al grupo" de WhatsApp).
+                        try {
+                            const note = `🏛️ **Junta Directiva en sesión** — debatiendo entre ${data.agents.join(', ')}.`;
+                            set((state) => {
+                                const msgs = state.messagesBySession[targetSessionId] || [];
+                                const idx = msgs.findIndex(m => m.id === activeBotMsgId);
+                                const sysMsg: Message = {
+                                    id: uuidv4(),
+                                    role: 'system',
+                                    content: note,
+                                    timestamp: new Date(),
+                                };
+                                const next = [...msgs];
+                                next.splice(idx >= 0 ? idx : next.length, 0, sysMsg);
+                                return {
+                                    messagesBySession: { ...state.messagesBySession, [targetSessionId]: next },
+                                };
+                            });
+                        } catch (e) {
+                            if (import.meta.env.DEV) console.error('onBoardStart error:', e);
+                        }
+                    },
+                    onBoardAgent: (data) => {
+                        // Board meeting: cada agente que empieza a hablar abre su
+                        // propia burbuja (estilo WhatsApp). Si la burbuja activa aún
+                        // está vacía (primer agente), la reetiquetamos en vez de
+                        // crear una nueva, para no dejar una burbuja huérfana.
+                        try {
+                            const matchingAgent = allAgents.find(a => a.role === data.role && a.id !== 'group-chat');
+                            const msgs = get().messagesBySession[targetSessionId] || [];
+                            const active = msgs.find(m => m.id === activeBotMsgId);
+                            const isEmpty = !!active && !active.content.trim() && !(active.thinking || '').trim();
+
+                            if (isEmpty) {
+                                set((state) => ({
+                                    messagesBySession: {
+                                        ...state.messagesBySession,
+                                        [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(m =>
+                                            m.id === activeBotMsgId
+                                                ? { ...m, role: data.role as Role, agentId: matchingAgent?.id ?? m.agentId, isConclusion: data.is_conclusion }
+                                                : m
+                                        ),
+                                    },
+                                }));
+                            } else {
+                                const newId = uuidv4();
+                                activeBotMsgId = newId;
+                                set((state) => ({
+                                    messagesBySession: {
+                                        ...state.messagesBySession,
+                                        [targetSessionId]: [
+                                            ...(state.messagesBySession[targetSessionId] || []),
+                                            {
+                                                id: newId,
+                                                role: data.role as Role,
+                                                content: '',
+                                                timestamp: new Date(),
+                                                agentId: matchingAgent?.id,
+                                                isConclusion: data.is_conclusion,
+                                            },
+                                        ],
+                                    },
+                                }));
+                            }
+                        } catch (e) {
+                            if (import.meta.env.DEV) console.error('onBoardAgent error:', e);
+                        }
+                    },
+                    onThinking: (piece) => {
+                        // Línea de pensamiento (reasoning_content de DeepSeek) → se
+                        // acumula en la burbuja activa y se pinta colapsable.
+                        try {
+                            set((state) => ({
+                                messagesBySession: {
+                                    ...state.messagesBySession,
+                                    [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(m =>
+                                        m.id === activeBotMsgId
+                                            ? { ...m, thinking: (m.thinking || '') + piece }
+                                            : m
+                                    ),
+                                },
+                            }));
+                        } catch (e) {
+                            if (import.meta.env.DEV) console.error('onThinking error:', e);
+                        }
                     },
                     onArtifactOpen: (data) => {
                         const typeMap: Record<string, 'code' | 'markdown' | 'mermaid' | 'data_table'> = {
@@ -602,7 +697,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, content: msg.content + `\n\n[ARTIFACT:${artifactId}:${data.title}]\n\n` }
                                         : msg
                                 ),
@@ -629,7 +724,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, content: msg.content + `\n[TOOL_START:${data.tool_name}]\n` }
                                         : msg
                                 ),
@@ -642,7 +737,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, content: msg.content + `\n[TOOL_RESULT:${data.tool_name}:${truncated}]\n` }
                                         : msg
                                 ),
@@ -660,7 +755,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === botMsgId
+                                    msg.id === activeBotMsgId
                                         ? { ...msg, content: msg.content + '\n\n⚠️ **Error de conexión.**' }
                                         : msg
                                 ),

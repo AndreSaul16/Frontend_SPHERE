@@ -53,6 +53,16 @@ export function ChatPanel() {
     const isGroupChat = selectedAgentId === 'group-chat';
     const groupMembers = getGroupMembers(agents);
 
+    // Indicador "X está escribiendo…" — resuelve el agente que habla ahora mismo
+    // a partir de la última burbuja (en board, va cambiando CEO → CTO → …).
+    const lastMessage = messages.length > 0 ? messages[messages.length - 1] : undefined;
+    const speakingAgent = isTyping && lastMessage && lastMessage.role !== 'user' && lastMessage.role !== 'system'
+        ? agents.find(a => a.id === lastMessage.agentId)
+        : undefined;
+    const typingLabel = speakingAgent
+        ? `${speakingAgent.name.split(' ')[0]} está escribiendo`
+        : 'Procesando_Respuesta';
+
     // Load pins when session changes
     useEffect(() => {
         if (currentSessionId) {
@@ -430,7 +440,7 @@ export function ChatPanel() {
                                             <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.2 }} className="h-1 w-1 rounded-full bg-electric-cyan" />
                                             <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.5, delay: 0.4 }} className="h-1 w-1 rounded-full bg-electric-cyan" />
                                         </div>
-                                        <span>Procesando_Respuesta</span>
+                                        <span>{typingLabel}</span>
                                     </motion.div>
                                 )}
                             </AnimatePresence>

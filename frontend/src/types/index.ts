@@ -54,6 +54,8 @@ export interface Message {
     content: string; // Markdown
     timestamp: Date;
     agentId?: string; // Si es null, es del sistema o usuario
+    thinking?: string; // Chain-of-thought (reasoning_content) emitido en streaming
+    isConclusion?: boolean; // Board meeting: síntesis ejecutiva final del CEO
 }
 
 export interface ChatSession {
