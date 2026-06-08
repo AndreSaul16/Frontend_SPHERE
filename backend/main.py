@@ -7,6 +7,7 @@ import hashlib
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.infrastructure.database import db
@@ -221,70 +222,90 @@ async def _ensure_indexes():
     logger.info("Índices de MongoDB verificados/creados")
 
 
+def _fatal_startup(phase: str, exc: Exception) -> None:
+    """Banner inconfundible en los logs de runtime: dice EXACTAMENTE qué fase
+    del arranque falló antes de que el contenedor aborte. Ver el runbook de
+    despliegue (docs/DEPLOYMENT_RUNBOOK.md §6)."""
+    bar = "=" * 64
+    logger.critical(bar)
+    logger.critical(f"FATAL STARTUP FAILURE — phase={phase}")
+    logger.critical(f"  {type(exc).__name__}: {exc}")
+    logger.critical("  El contenedor abortará. Revisa esta fase y que las env vars")
+    logger.critical("  críticas estén en Railway (ver DEPLOY_CHECKLIST.md).")
+    logger.critical(bar)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Ciclo de vida de la aplicación multi-tenant."""
-    # Startup
+    # Startup — cada fase se marca para que, si algo peta, el banner FATAL
+    # diga EXACTAMENTE qué impidió arrancar (ver docs/DEPLOYMENT_RUNBOOK.md §6).
     logger.info("Iniciando SPHERE Backend (multi-tenant)...")
-    _validate_env_vars()
-
+    client = None
+    phase = "env"
     try:
+        _validate_env_vars()
+
+        phase = "mongodb"
         db.connect()
         logger.info("Conexión a MongoDB establecida")
         await _ensure_indexes()
-    except Exception as e:
-        logger.critical(f"No se pudo conectar a MongoDB: {e}")
+
+        # Firebase Auth
+        phase = "firebase"
+        from app.core.auth import init_firebase
+
+        init_firebase()
+
+        # Redis + FastAPI Limiter (no es fatal si falla)
+        phase = "redis"
+        from app.infrastructure.redis_client import get_redis
+
+        redis_client = await get_redis()
+        if redis_client:
+            try:
+                # Store redis client globally for rate limiter dependencies
+                import app.infrastructure.redis_client as rc_module
+
+                rc_module._redis_client = redis_client
+                logger.info("FastAPILimiter inicializado (rate limiting activo)")
+            except Exception as e:
+                logger.warning(f"No se pudo inicializar rate limiter: {e}")
+        else:
+            logger.warning("Redis no disponible - rate limiting DESACTIVADO")
+
+        # N8N Client
+        phase = "n8n"
+        client = N8NClient(
+            base_url=settings.N8N_BASE_URL,
+            webhook_secret=settings.N8N_WEBHOOK_SECRET,
+        )
+        await client.start()
+        n8n_module.n8n_client = client
+        logger.info("N8N Client inicializado")
+
+        # Deploy n8n workflows automatically
+        from app.infrastructure.n8n_deployer import deploy_all_workflows
+
+        await deploy_all_workflows()
+
+        # Cargar herramientas
+        phase = "tools"
+        from app.infrastructure.tools.registry import load_all_tools
+
+        load_all_tools()
+        logger.info("Tool registry cargado")
+    except Exception as exc:
+        _fatal_startup(phase, exc)
         raise
 
-    # Firebase Auth
-    from app.core.auth import init_firebase
-
-    init_firebase()
-
-    # Redis + FastAPI Limiter
-    from app.infrastructure.redis_client import get_redis
-
-    redis_client = await get_redis()
-    if redis_client:
-        try:
-            from fastapi_limiter.callback import default_callback
-            from fastapi_limiter.identifier import default_identifier
-
-            # Store redis client globally for rate limiter dependencies
-            import app.infrastructure.redis_client as rc_module
-
-            rc_module._redis_client = redis_client
-            logger.info("FastAPILimiter inicializado (rate limiting activo)")
-        except Exception as e:
-            logger.warning(f"No se pudo inicializar rate limiter: {e}")
-    else:
-        logger.warning("Redis no disponible - rate limiting DESACTIVADO")
-
-    # N8N Client
-    client = N8NClient(
-        base_url=settings.N8N_BASE_URL,
-        webhook_secret=settings.N8N_WEBHOOK_SECRET,
-    )
-    await client.start()
-    n8n_module.n8n_client = client
-    logger.info("N8N Client inicializado")
-
-    # Deploy n8n workflows automatically
-    from app.infrastructure.n8n_deployer import deploy_all_workflows
-
-    await deploy_all_workflows()
-
-    # Cargar herramientas
-    from app.infrastructure.tools.registry import load_all_tools
-
-    load_all_tools()
-    logger.info("Tool registry cargado")
-
+    logger.info("SPHERE Backend arrancado correctamente — listo para servir")
     yield  # La aplicación corre aquí
 
     # Shutdown
     logger.info("Cerrando SPHERE Backend...")
-    await client.close()
+    if client is not None:
+        await client.close()
 
     # Cerrar Redis si existe
     from app.infrastructure.redis_client import close_redis
@@ -335,6 +356,27 @@ class SecurityHeadersMiddleware:
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Último cortafuegos de errores. Las HTTPException (4xx/5xx explícitas) las
+    maneja FastAPI; esto solo captura excepciones NO controladas: las loguea con
+    traceback completo en servidor y devuelve al cliente un 500 saneado, sin
+    filtrar stack traces ni nombres de colecciones. Ver core/error_handling.py."""
+    logger.error(
+        f"Unhandled exception en {request.method} {request.url.path}: "
+        f"{type(exc).__name__}: {exc}",
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "common.internal_error",
+            "message": "Error interno del servidor.",
+            "details": {},
+        },
+    )
 
 
 # Rate limiters — se activan solo si Redis está disponible.
