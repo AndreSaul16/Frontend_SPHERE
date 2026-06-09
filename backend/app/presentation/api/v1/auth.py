@@ -306,6 +306,13 @@ SERVICE_DEFINITIONS = {
         "fields": ["api_key"],
         "metadata_fields": ["calendar_id"],
         "description": "Permite a los agentes gestionar tu calendario de Google.",
+        "tools": [
+            "calendar_list_events",
+            "calendar_create_event",
+            "calendar_update_event",
+            "calendar_delete_event",
+            "calendar_check_availability",
+        ],
     },
     "linkedin": {
         "label": "LinkedIn",
@@ -313,6 +320,11 @@ SERVICE_DEFINITIONS = {
         "fields": ["access_token"],
         "metadata_fields": [],
         "description": "Permite al CMO publicar contenido en tu perfil de LinkedIn.",
+        "tools": [
+            "post_to_linkedin",
+            "get_social_analytics",
+            "schedule_post",
+        ],
     },
     "whatsapp": {
         "label": "WhatsApp Business",
@@ -320,6 +332,11 @@ SERVICE_DEFINITIONS = {
         "fields": ["access_token"],
         "metadata_fields": ["phone_number_id"],
         "description": "Permite enviar mensajes por WhatsApp Business API.",
+        "tools": [
+            "whatsapp_send_message",
+            "whatsapp_send_notification",
+            "whatsapp_read_messages",
+        ],
     },
     "jules": {
         "label": "Jules (Google Coding Agent)",
@@ -327,6 +344,11 @@ SERVICE_DEFINITIONS = {
         "fields": ["api_key"],
         "metadata_fields": [],
         "description": "Permite al CTO delegar tareas de código a Jules.",
+        "tools": [
+            "check_jules_status",
+            "create_jules_task",
+            "review_jules_output",
+        ],
     },
     "instagram": {
         "label": "Instagram",
@@ -334,6 +356,11 @@ SERVICE_DEFINITIONS = {
         "fields": ["access_token"],
         "metadata_fields": ["instagram_account_id"],
         "description": "Permite al CMO publicar contenido en Instagram.",
+        "tools": [
+            "post_to_instagram",
+            "get_social_analytics",
+            "schedule_post",
+        ],
     },
 }
 
@@ -384,6 +411,7 @@ async def list_service_credentials(user: dict = Depends(get_current_user)):
                 "connected": connected_cred is not None,
                 "metadata": connected_cred["metadata"] if connected_cred else {},
                 "created_at": connected_cred["created_at"] if connected_cred else None,
+                "tools": definition.get("tools", []),
             }
         )
 

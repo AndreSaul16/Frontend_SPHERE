@@ -288,7 +288,7 @@ export function ChatPanel() {
     return (
         <div className="flex flex-col h-full bg-transparent relative overflow-hidden">
             {/* Header */}
-            <header className="h-20 pl-16 lg:pl-8 pr-6 border-b border-white/5 flex items-center justify-between bg-midnight/40 backdrop-blur-xl z-20">
+            <header className="h-20 pl-14 lg:pl-8 pr-6 border-b border-white/5 flex items-center justify-between bg-midnight/40 backdrop-blur-xl z-20">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div className="relative">
                         <motion.div

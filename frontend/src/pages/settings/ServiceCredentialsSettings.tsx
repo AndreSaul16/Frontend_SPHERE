@@ -28,6 +28,7 @@ interface ServiceDefinition {
   connected: boolean;
   metadata: Record<string, string>;
   created_at: string | null;
+  tools?: string[];
 }
 
 interface ServiceCredentialsResponse {
@@ -205,17 +206,34 @@ export function ServiceCredentialsSettings() {
           >
             {/* Header */}
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className={SERVICE_COLORS[svc.service] || "text-text-primary"}>
                   {SERVICE_ICONS[svc.service] || <Key className="h-5 w-5" />}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-semibold text-text-primary">{svc.label}</h3>
                   <p className="text-xs text-text-secondary mt-1">{svc.description}</p>
+                  {svc.tools && svc.tools.length > 0 && (
+                    <div className="relative group/tools inline-block mt-2">
+                      <span className="px-2 py-0.5 bg-surface-highlight/70 text-text-secondary border border-surface-highlight rounded-full text-[10px] font-medium cursor-default">
+                        {svc.tools.length} herramienta{svc.tools.length !== 1 ? "s" : ""}
+                      </span>
+                      <div className="absolute bottom-full left-0 mb-2 opacity-0 invisible group-hover/tools:opacity-100 group-hover/tools:visible transition-all duration-200 z-50 pointer-events-none">
+                        <div className="bg-surface border border-surface-highlight rounded-xl p-3 shadow-2xl min-w-[200px]">
+                          <p className="text-[10px] text-text-secondary/60 uppercase tracking-widest mb-2">Herramientas disponibles</p>
+                          <ul className="space-y-1">
+                            {svc.tools.map((t) => (
+                              <li key={t} className="text-xs text-text-primary font-mono">{t}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               {svc.connected && (
-                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px]">
+                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full text-[10px] flex-shrink-0">
                   Configurado
                 </span>
               )}
