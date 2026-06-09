@@ -29,10 +29,14 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Permisos para que el entrypoint default pueda escribir confs procesados.
 RUN chown -R nginx:nginx /usr/share/nginx/html
 
+# Custom entrypoint with debug logging for Railway troubleshooting
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Railway handles healthcheck via healthcheckPath in railway.toml.
 # No Docker HEALTHCHECK — it races with nginx startup and conflicts with Railway's own probe.
 ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["nginx", "-g", "daemon off;"]
+ENTRYPOINT ["/docker-entrypoint.sh"]
