@@ -400,6 +400,12 @@ async def agent_node(state: AgentState):
     # del historial (incluido el checkpoint persistido) para no romper el LLM.
     if state.get("board_mode"):
         history = _strip_tools_from_history(history)
+        # Reemplazar HumanMessages crudos con el board_query formateado.
+        # El HumanMessage original (sin contexto de junta) confunde al LLM:
+        # el modelo lo interpreta como pregunta directa al agente y responde
+        # ignorando el protocolo de cadena CEO→CTO→CFO→CMO→CEO.
+        history = [msg for msg in history if not isinstance(msg, HumanMessage)]
+        history.insert(0, HumanMessage(content=query))
 
     # 6. Construir el prompt rico
     rich_system_prompt = AGENT_PROMPT_TEMPLATE.format(
@@ -411,6 +417,13 @@ async def agent_node(state: AgentState):
     # Si el último mensaje es un ToolMessage, estamos en un loop tool→agent.
     # NO agregar HumanMessage extra — DeepSeek requiere tool_calls→ToolMessage estricto.
     if isinstance(last_msg, ToolMessage):
+        final_messages = [
+            SystemMessage(content=rich_system_prompt),
+            *history,
+        ]
+    elif state.get("board_mode"):
+        # Board mode: el board_query ya se insertó en history arriba
+        # (reemplazando los HumanMessages crudos). No duplicar.
         final_messages = [
             SystemMessage(content=rich_system_prompt),
             *history,
