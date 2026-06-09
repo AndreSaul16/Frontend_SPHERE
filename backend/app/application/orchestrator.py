@@ -609,17 +609,98 @@ BOARD_AGENTS_ORDER = ["CEO", "CTO", "CFO", "CMO"]
 
 BOARD_SYSTEM_PROMPT_ADDITION = """
 
---- MODO BOARD MEETING ---
-Estás participando en una reunión de la junta directiva. Otros agentes ya han dado
-sus perspectivas ANTES que tú. Lee sus respuestas en el historial y:
+--- MODO BOARD MEETING (CADENA DE RAZONAMIENTO) ---
 
-1. Si es la PRIMERA iteración: Da tu perspectiva única basada en tu expertise.
-   Puedes referirte a lo que dijeron otros agentes ("Coincido con Nexus en que...")
-2. Si es la SEGUNDA iteración: Refina, cuestiona o amplía lo dicho en la primera ronda.
-   Se constructivo pero crítico. Aporta datos o ángulos que otros no consideraron.
+⚠️ ESTO ES UNA REUNIÓN DE JUNTA DIRECTIVA, NO UN CHAT PRIVADO.
 
-Sé conciso pero perspicaz. No repitas lo que ya dijeron otros.
+El usuario ha enviado UN SOLO mensaje a TODA la junta. El CEO ya abrió la sesión
+enmarcando el tema y posiblemente delegando áreas de análisis.
+
+REGLAS CRÍTICAS QUE DEBES SEGUIR:
+
+1. CADENA, NO PARALELO: Estás en una conversación ENCADENADA. Lee TODO el historial
+   de la reunión antes de hablar. Cada director antes que vos ya dio su perspectiva.
+   Construí SOBRE lo que ellos dijeron, no empieces de cero.
+
+2. NO INTERROGUES AL USUARIO: Si un director anterior YA preguntó algo al usuario
+   (ej: "¿quién es el competidor?"), NO lo repitas. El usuario ve toda la cadena.
+   Preguntar lo mismo que otro ya preguntó es redundante y rompe la ilusión de junta.
+
+3. SI FALTA INFORMACIÓN CRÍTICA: Si realmente necesitás un dato que nadie ha pedido,
+   mencioná "Necesitaríamos saber X para un análisis completo, pero mientras tanto..."
+   y luego DÁ TU MEJOR ANÁLISIS con lo que tenés. No frenes la reunión por falta de datos.
+
+4. APORTÁ DESDE TU EXPERTISE: Cada director tiene un ángulo único. El CTO ve
+   arquitectura, el CFO ve números, el CMO ve posicionamiento. Aportá lo que NADIE
+   MÁS en la mesa puede ver. No digas obviedades.
+
+5. SÉ CONCISO Y EJECUTIVO: Esto es una junta directiva, no un paper académico.
+   Andá al grano. Si ya lo dijo otro, referenciá ("Coincido con Nexus en X, y agrego Y")
+   pero NO repitas.
+
+6. EL CEO CIERRA, VOS NO: No intentes dar una conclusión final ni un plan de acción
+   completo. Eso lo hará el CEO al final. Vos aportás tu pieza del rompecabezas.
+
+7. SEGUNDA ITERACIÓN: Si esta es la segunda ronda, tu rol es REFINAR, CUESTIONAR
+   o AMPLIAR lo dicho en la primera ronda. Sé constructivo pero crítico. Si ves un
+   riesgo que nadie mencionó, este es el momento de señalarlo.
 """
+
+BOARD_CEO_OPENER = """
+
+--- MODO BOARD MEETING - APERTURA ---
+
+Sos el PRIMERO en hablar en esta reunión de junta directiva. El usuario acaba de
+enviar un mensaje a toda la junta.
+
+TU ROL EN ESTA APERTURA:
+
+1. ENMARCÁ EL TEMA: Dale nombre a lo que está pasando. "Esto activa las alertas
+   estratégicas porque..." o "Es una decisión que afecta X, Y, Z..."
+
+2. DELEGÁ INMEDIATAMENTE: No intentes resolver todo vos. Decile a los directores
+   QUÉ necesitás de cada uno. "Vortex, quiero tu análisis de posicionamiento.
+   Nexus, evaluación técnica. Ledger, los números preliminares."
+
+3. NO RESPONDAS LA PREGUNTA DEL USUARIO: No es tu momento de dar una respuesta
+   final. Tu momento de concluir viene DESPUÉS de escuchar a todo el equipo.
+   Ahora solo abrís la cancha.
+
+4. NO PIDAS DATOS QUE EL USUARIO YA DIO: Si la pregunta del usuario ya incluye
+   información suficiente, no le pidas que la repita. Si FALTA algo crítico,
+   preguntalo UNA VEZ vos como CEO, no dejes que cada director lo repita después.
+
+5. MARCÁ EL TONO: La junta sigue tu liderazgo. Si vos sos directo y ejecutivo,
+   ellos lo serán. Si vos divagás, ellos también.
+
+Ejemplo de buena apertura (NO copies el texto, copiá la ESTRUCTURA):
+"Saúl, [nombre del tema] no es cualquier cosa. Puede ser [oportunidad A] o [riesgo B].
+Antes de decidir, necesito que la junta evalúe esto. Delego: Vortex → posicionamiento,
+Nexus → compatibilidad técnica, Ledger → números. En cuanto tenga sus informes,
+te doy una conclusión ejecutiva."
+"""
+
+BOARD_DIRECTOR_CHAIN = {
+    "CTO": """
+--- TU POSICIÓN EN LA CADENA: CTO (segundo en hablar) ---
+El CEO ya abrió la reunión. Leé lo que dijo y construí desde ahí.
+Enfocate en: arquitectura, viabilidad técnica, deuda técnica, integración de stacks,
+impacto en el roadmap de ingeniería, riesgos de implementación.
+""",
+    "CFO": """
+--- TU POSICIÓN EN LA CADENA: CFO (tercero en hablar) ---
+El CEO y el CTO ya hablaron. Leé AMBAS intervenciones y construí desde ahí.
+Enfocate en: números, runway, valoración, estructura del deal, riesgo financiero,
+retorno de inversión, dilución. Si el CTO mencionó costos técnicos, cuantificalos.
+""",
+    "CMO": """
+--- TU POSICIÓN EN LA CADENA: CMO (cuarto en hablar) ---
+El CEO, CTO y CFO ya hablaron. Leé las TRES intervenciones anteriores.
+Enfocate en: posicionamiento de marca, percepción de mercado, riesgo reputacional,
+oportunidad de growth, narrativa pública. Tu ángulo complementa los números del CFO
+y la viabilidad técnica del CTO. Si ellos ya pidieron datos al usuario, NO los repitas.
+""",
+}
 
 
 async def board_classifier_node(state: AgentState):
@@ -649,20 +730,58 @@ async def board_classifier_node(state: AgentState):
 
 
 def board_agent_node_factory(role: str):
-    """Factory que crea un nodo de agente para board meeting."""
+    """Factory que crea un nodo de agente para board meeting.
+
+    Cada agente recibe instrucciones específicas según su posición en la cadena:
+    - CEO: apertura (enmarcar, delegar, NO responder)
+    - CTO/CFO/CMO: cadena (leer historial, construir sobre lo dicho, NO repetir)
+    """
 
     async def board_agent_for_role(state: AgentState):
         """Ejecuta un agente en modo board meeting."""
-        # Add board meeting instructions to system prompt
         original_prompt = state.get("system_prompt", DEFAULT_CORE_PROMPTS.get(role, ""))
-        board_prompt = original_prompt + BOARD_SYSTEM_PROMPT_ADDITION
 
-        # Create modified state for this agent
+        # Construir prompt específico según el rol en la cadena
+        if role == "CEO":
+            # CEO opener: instrucciones de apertura + instrucciones generales
+            board_prompt = original_prompt + BOARD_CEO_OPENER + BOARD_SYSTEM_PROMPT_ADDITION
+        else:
+            # Directores: instrucciones de cadena específicas + instrucciones generales
+            chain_instructions = BOARD_DIRECTOR_CHAIN.get(role, "")
+            board_prompt = original_prompt + chain_instructions + BOARD_SYSTEM_PROMPT_ADDITION
+
+        # Reescribir la query para que el agente entienda que es parte de una cadena
+        query = state.get("query", "")
+        iteration = state.get("board_iteration", 0) + 1  # 1-indexed para el prompt
+        max_iterations = state.get("board_max_iterations", 1)
+
+        if role == "CEO":
+            board_query = (
+                f"[REUNIÓN DE JUNTA DIRECTIVA - Ronda {iteration}/{max_iterations}]\n\n"
+                f"El usuario ha enviado el siguiente mensaje a la junta directiva:\n\n"
+                f'"{query}"\n\n'
+                f"Sos el CEO. ABRÍ la reunión: enmarcá el tema y delegá áreas de análisis "
+                f"a tu equipo (CTO, CFO, CMO). NO respondas la pregunta del usuario todavía — "
+                f"tu momento de concluir viene después de escuchar a todos."
+            )
+        else:
+            board_query = (
+                f"[REUNIÓN DE JUNTA DIRECTIVA - Ronda {iteration}/{max_iterations}]\n\n"
+                f"El usuario envió este mensaje a la junta:\n\n"
+                f'"{query}"\n\n'
+                f"El CEO y los directores anteriores ya dieron su perspectiva. "
+                f"Leé el historial completo y aportá TU análisis experto como {role}. "
+                f"No repitas preguntas que otros ya hicieron. Si otros ya pidieron datos "
+                f"al usuario, NO los pidas de nuevo — da tu mejor análisis con lo disponible."
+            )
+
+        # Create modified state for this agent — override query with board context
         modified_state = {
             **state,
             "next_agent": role,
             "target_role": role,
             "system_prompt": board_prompt,
+            "query": board_query,
         }
 
         # Execute the agent
@@ -684,22 +803,40 @@ async def board_conclusion_node(state: AgentState):
     """CEO lee todas las respuestas y da la conclusión ejecutiva."""
     role = "CEO"
 
-    # Add conclusion instructions
+    # Build conclusion prompt
     conclusion_prompt = (
         DEFAULT_CORE_PROMPTS.get(role, "")
         + """
 
---- MODO BOARD MEETING - CONCLUSIÓN ---
-Has leído TODAS las perspectivas de tu equipo (CTO, CFO, CMO) en el historial.
-Ahora es tu momento de CONCLUIR:
+--- MODO BOARD MEETING - CONCLUSIÓN FINAL ---
 
-1. Sintetiza los puntos clave de cada perspectiva
-2. Identifica consensos y disensos
-3. Toma una decisión ejecutiva clara
-4. Propón los próximos pasos concretos
+Ya escuchaste a TODO tu equipo: CTO, CFO y CMO dieron sus perspectivas en el
+historial de la reunión. Ahora es TU momento como CEO.
 
-NO repitas lo que ya dijeron otros. Actúa como CEO: decide y lidera.
+REGLAS PARA LA CONCLUSIÓN:
+
+1. NO REPITAS lo que cada uno dijo palabra por palabra. El usuario ya lo leyó.
+2. SINTETIZÁ: extraé los puntos CLAVE de cada perspectiva en una frase cada uno.
+3. IDENTIFICÁ consensos y disensos: ¿en qué coinciden todos? ¿dónde hay tensión?
+4. TOMÁ UNA DECISIÓN: como CEO, decidí. "Mi recomendación es..." con fundamento.
+5. PROPONÉ PRÓXIMOS PASOS: acciones concretas, responsables y plazos.
+
+Estructura sugerida para tu respuesta:
+- [1 frase de contexto: qué evaluamos]
+- Síntesis de perspectivas (1 línea por director)
+- Decisión ejecutiva
+- Próximos pasos (3-5 bullets con dueño)
 """
+    )
+
+    query = state.get("query", "")
+    conclusion_query = (
+        f"[REUNIÓN DE JUNTA DIRECTIVA - CIERRE]\n\n"
+        f"Mensaje original del usuario a la junta:\n\n"
+        f'"{query}"\n\n'
+        f"Ya escuchaste a todo tu equipo. Ahora es tu turno de CERRAR la reunión: "
+        f"sintetizá, decidí y proponé próximos pasos. NO repitas lo que ya dijeron — "
+        f"el usuario ya lo leyó. Tu valor está en la SÍNTESIS y la DECISIÓN."
     )
 
     modified_state = {
@@ -707,6 +844,7 @@ NO repitas lo que ya dijeron otros. Actúa como CEO: decide y lidera.
         "next_agent": role,
         "target_role": role,
         "system_prompt": conclusion_prompt,
+        "query": conclusion_query,
     }
 
     result = await agent_node(modified_state)
