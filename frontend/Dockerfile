@@ -10,6 +10,11 @@ RUN npm ci
 # Copy source and build
 COPY . .
 
+# Debug: show Node/TS versions and verify tsconfig
+RUN node -v && npm -v && npx tsc -v
+RUN echo "=== tsconfig.json ===" && cat tsconfig.json && echo "=== END ==="
+RUN xxd tsconfig.json | head -3
+
 # Build with placeholder; nginx substitutes real URL at container start
 RUN VITE_API_URL=__VITE_API_URL__ npm run build
 
