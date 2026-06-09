@@ -10,14 +10,15 @@ server {
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript image/svg+xml;
     gzip_min_length 256;
 
-    # Enable sub_filter for JavaScript content type (runtime VITE_API_URL substitution)
-    sub_filter_types application/javascript;
+    # Enable sub_filter for JavaScript and HTML content types (runtime VITE_API_URL substitution).
+    # Must be in server context so it applies to ALL locations, including regex-matched JS/CSS assets.
+    sub_filter_types application/javascript text/html;
+    sub_filter '__VITE_API_URL__' '${VITE_API_URL}';
+    sub_filter_once on;
 
     # SPA fallback — all routes serve index.html
     location / {
         try_files $uri $uri/ /index.html;
-        sub_filter '__VITE_API_URL__' '${VITE_API_URL}';
-        sub_filter_once on;
     }
 
     # Cache static assets (JS, CSS, images) for 1 year

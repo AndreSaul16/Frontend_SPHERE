@@ -34,7 +34,9 @@ function AuthenticatedApp() {
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/status" element={<StatusPage />} />
+
+      {/* Protected: deploy status (served by nginx SPA fallback, auth-gated client-side) */}
+      <Route path="/status" element={<RequireAuth><StatusPage /></RequireAuth>} />
 
       {/* Protected routes */}
       <Route

@@ -83,8 +83,8 @@ function ServiceCard({
 }
 
 /**
- * Página pública /status — muestra el estado de deploy de todos los servicios.
- * Sin autenticación requerida.
+ * Página /status — muestra el estado de deploy de todos los servicios.
+ * Requiere autenticación (protegida por RequireAuth en el router).
  */
 export function StatusPage() {
     const { backend, backendLoading, backendError, fetchStatus } = useDeployStore();
