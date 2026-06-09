@@ -152,7 +152,11 @@ Cuando "el deploy no sale", **siempre** es uno de estos tres. El truco es saber
 python scripts/railway-doctor.py                 # todos los servicios
 python scripts/railway-doctor.py Backend_SHPERE  # filtra por nombre
 python scripts/railway-doctor.py --logs 80       # más líneas de build log
+python scripts/railway-doctor.py --json          # salida JSON para CI
 ```
+
+El flag `--json` produce un array `[{service, status, sha, error, failure_mode}]`
+consumible por GitHub Actions y otros sistemas de automatización.
 
 Para cada servicio imprime su config de build y el estado del último deploy, y
 **si está bloqueado, el motivo exacto**: `skippedReason` (modo A) o las últimas
@@ -239,15 +243,41 @@ IDs del proyecto SPHERE (entorno `production`):
   - `GET /api/v1/health/live`  → liveness puro (siempre 200 si el proceso vive).
   - `GET /api/v1/health/ready` → readiness (Mongo/Redis); 200 con el detalle.
   - `GET /api/v1/health/health`→ el que usa el healthcheck de Railway.
+  - `GET /api/v1/health/deploy`→ **NUEVO** — devuelve `{ commit_sha, build_timestamp, deploy_status, service_name, version }` sin auth ni queries a DB. Responde en <1ms. El `deploy_status` es `"live"` cuando `GIT_COMMIT_SHA` y `BUILD_TIMESTAMP` están definidos (inyectados por Railway), o `"deploying"` cuando no.
+- **Página de estado pública:** `GET /status` (frontend) — muestra tarjetas por servicio con indicadores de color:
+  - 🟢 Verde: Live
+  - 🟡 Amarillo: Deploying
+  - 🔴 Rojo: Unreachable
+  - ⚫ Gris: Unknown
+  - El frontend inyecta su propio SHA y timestamp en build-time vía Vite `define`.
 - **Códigos de error:** taxonomía en [`backend/app/core/errors.py`](../backend/app/core/errors.py)
   (`<dominio>.<estado>`), para mapear código→acción en frontend y agrupar en logs.
+
+### Mejoras implementadas (2026-06-09)
+
+- **Guard de invariantes:** `scripts/check-monorepo-invariants.sh` — verifica que no
+  haya `.github/workflows/`, `railway.toml`, ni `Dockerfile*` en la raíz del
+  monorepo. Sale con exit code 2 si encuentra violaciones, reportando TODAS
+  (no solo la primera) y explicando POR QUÉ cada una es peligrosa.
+- **CI por-repo no bloqueante:**
+  - `backend/.github/workflows/ci-backend.yml` → pytest (unit only), non-required.
+  - `frontend/.github/workflows/ci-frontend.yml` → vitest + tsc + eslint, non-required.
+  - Ambos triggers: push a main + workflow_dispatch.
+- **Deploy Monitor (GitHub Actions):**
+  - `backend/.github/workflows/deploy-monitor.yml` y
+    `frontend/.github/workflows/deploy-monitor.yml` — poll de Railway GraphQL cada
+    30s × 10 intentos tras cada push. Setea commit status (`pending` → `success` /
+    `failure` / `error`) y auto-crea GitHub Issue en failure con el contexto del
+    error. Deduplica issues existentes por label `deploy-failure`.
+  - Requiere secrets: `RAILWAY_API_TOKEN` y `RAILWAY_PROJECT_ID`.
+- **`railway-doctor.py --json`:** salida estructurada `[{service, status, sha, error,
+  failure_mode}]` para consumo automatizado en CI/ monitoreo.
 
 ### Mejoras futuras recomendadas (no implementadas)
 - Logs en **JSON** en producción (parseables por agregadores) tras un flag
   `LOG_FORMAT=json`.
 - **Sentry** (o similar) para alertas de errores de runtime con contexto.
-- Reintroducir CI **por-repo** y **no bloqueante**, separando tests unitarios
-  (siempre verdes) de los de integración (que requieren credenciales).
+- E2E tests para la página de status (no críticos — la página solo muestra datos).
 
 ---
 

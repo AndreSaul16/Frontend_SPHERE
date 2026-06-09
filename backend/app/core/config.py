@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     # Entorno: "production" (default, estricto) | "development" (laxo, dev-only)
     ENVIRONMENT: str = "production"
 
+    # Deploy metadata — inyectados por Railway en el build
+    GIT_COMMIT_SHA: str = ""
+    BUILD_TIMESTAMP: str = ""
+
     # Variable obligatoria
     MONGODB_URL: str
     DB_NAME: str = "sphere_db"

@@ -17,6 +17,7 @@ import { ErrorOverlay } from "@/components/common/ErrorOverlay";
 import { useChatStore } from "@/store/useChatStore";
 import { PaywallModal } from "@/components/modals/PaywallModal";
 import { BillingPage } from "@/pages/BillingPage";
+import { StatusPage } from "@/pages/StatusPage";
 
 function AuthenticatedApp() {
   const { fetchSessions, fetchCustomAgents } = useChatStore();
@@ -33,6 +34,7 @@ function AuthenticatedApp() {
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/status" element={<StatusPage />} />
 
       {/* Protected routes */}
       <Route

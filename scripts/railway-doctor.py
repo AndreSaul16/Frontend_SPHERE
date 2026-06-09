@@ -18,6 +18,7 @@ Uso:
     python scripts/railway-doctor.py                 # todos los servicios
     python scripts/railway-doctor.py Backend_SHPERE  # filtra por nombre
     python scripts/railway-doctor.py --logs 60       # más líneas de log
+    python scripts/railway-doctor.py --json          # salida JSON para CI
 
 Token (en este orden):
     1) env RAILWAY_API_TOKEN
@@ -126,12 +127,17 @@ def main() -> None:
     args = sys.argv[1:]
     log_lines = 40
     name_filter = None
+    json_mode = False
     i = 0
     while i < len(args):
         a = args[i]
         if a in ("-h", "--help"):
             print(__doc__)
             return
+        if a == "--json":
+            json_mode = True
+            i += 1
+            continue
         if a == "--logs":
             log_lines = int(args[i + 1])
             i += 2
@@ -144,10 +150,13 @@ def main() -> None:
 
     data = gql(token, PROJECT_Q, {"id": project_id})
     project = data["project"]
-    print("=" * 72)
-    print(f" RAILWAY DOCTOR — proyecto: {project['name']}")
-    print("=" * 72)
 
+    if not json_mode:
+        print("=" * 72)
+        print(f" RAILWAY DOCTOR — proyecto: {project['name']}")
+        print("=" * 72)
+
+    json_results: list[dict] = []
     any_blocked = False
     services = [e["node"] for e in project["services"]["edges"]]
     services.sort(key=lambda s: s["name"])
@@ -157,7 +166,15 @@ def main() -> None:
             continue
         insts = svc["serviceInstances"]["edges"]
         if not insts:
-            print(f"\n■ {svc['name']}: (sin instancias)")
+            if not json_mode:
+                print(f"\n■ {svc['name']}: (sin instancias)")
+            json_results.append({
+                "service": svc["name"],
+                "status": "(sin instancias)",
+                "sha": None,
+                "error": "Sin instancias de servicio",
+                "failure_mode": None,
+            })
             continue
         inst = insts[0]["node"]
         src = inst.get("source") or {}
@@ -182,6 +199,39 @@ def main() -> None:
             meta = node.get("meta") or {}
             dep_id = node["id"]
 
+        # Collect JSON result
+        sha = (meta.get("commitHash") or "")[:7] or None
+        error_msg: str | None = None
+        failure_mode: str | None = None
+
+        if status in BLOCKED_STATUSES:
+            any_blocked = True
+            reason = meta.get("skippedReason")
+            if reason:
+                error_msg = reason
+                failure_mode = "SKIPPED"
+            elif status in ("FAILED", "CRASHED"):
+                failure_mode = status
+                if dep_id:
+                    try:
+                        logs = gql(token, BUILDLOGS_Q, {"id": dep_id, "limit": log_lines})
+                        rows = logs.get("buildLogs") or []
+                        error_msg = rows[-1].get("message", "").rstrip() if rows else "Sin build logs"
+                    except SystemExit:
+                        error_msg = "No se pudieron leer los build logs"
+
+        json_results.append({
+            "service": svc["name"],
+            "status": status,
+            "sha": sha,
+            "error": error_msg,
+            "failure_mode": failure_mode,
+        })
+
+        if json_mode:
+            continue
+
+        # Human-readable output (non-JSON mode)
         marker = "OK " if status in OK_STATUSES else (
             "!! " if status in BLOCKED_STATUSES else ".. "
         )
@@ -190,13 +240,11 @@ def main() -> None:
         print(f"        rootDirectory  : {inst.get('rootDirectory')!r}")
         print(f"        railwayConfig  : {inst.get('railwayConfigFile')!r}")
         print(f"        builder        : {inst.get('builder')}")
-        sha = (meta.get('commitHash') or '')[:7]
         if sha:
             msg = (meta.get('commitMessage') or '').splitlines()
             print(f"        commit         : {sha}  {msg[0][:50] if msg else ''}")
 
         if status in BLOCKED_STATUSES:
-            any_blocked = True
             reason = meta.get("skippedReason")
             if reason:
                 print(f"        >> BLOQUEADO: {reason}")
@@ -215,6 +263,10 @@ def main() -> None:
                         print(f"           [{sev}] {r.get('message','').rstrip()}")
                 except SystemExit:
                     print("           (no se pudieron leer los build logs)")
+
+    if json_mode:
+        print(json.dumps(json_results, indent=2, ensure_ascii=False))
+        sys.exit(1 if any_blocked else 0)
 
     print("\n" + "=" * 72)
     if any_blocked:

@@ -68,3 +68,22 @@ async def readiness() -> Dict:
 async def health_check() -> Dict:
     """Health check de compatibilidad."""
     return await readiness()
+
+
+@router.get("/deploy", tags=["Health"])
+async def deploy_status() -> Dict:
+    """
+    Deploy metadata: expone SHA del commit, timestamp del build,
+    y estado del despliegue sin consultar base de datos.
+    """
+    commit_sha = settings.GIT_COMMIT_SHA or "unknown"
+    build_timestamp = settings.BUILD_TIMESTAMP or ""
+    is_live = bool(settings.GIT_COMMIT_SHA and settings.BUILD_TIMESTAMP)
+
+    return {
+        "commit_sha": commit_sha,
+        "build_timestamp": build_timestamp,
+        "deploy_status": "live" if is_live else "deploying",
+        "service_name": "backend",
+        "version": settings.PROJECT_NAME,
+    }

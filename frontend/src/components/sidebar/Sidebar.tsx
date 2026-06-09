@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/useChatStore";
 import { useUserAvatar } from "@/hooks/useUserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { DeployStatusIndicator } from "@/components/deploy/DeployStatusIndicator";
 
 /**
  * Extract initials from displayName (e.g., "María García" → "MG")
@@ -299,6 +300,7 @@ export function Sidebar() {
                     <CreditCard className="h-4 w-4" />
                     <span>Facturación</span>
                 </Link>
+                <DeployStatusIndicator />
                 <Link
                     to="/settings"
                     onClick={() => toggleSidebar(false)}
