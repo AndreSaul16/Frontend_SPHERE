@@ -34,7 +34,7 @@ interface ChatState {
     loadSession: (sessionId: string) => Promise<void>;
     selectAgent: (agentId: string) => void;
     toggleSidebar: (open?: boolean) => void;
-    sendMessage: (content: string, regenerate?: boolean) => Promise<void>;
+    sendMessage: (content: string, opts?: { regenerateFromId?: string }) => Promise<void>;
     stopGeneration: () => void;
     toggleArtifactPanel: () => void;
     renameAgent: (id: string, newName: string) => void;
@@ -496,7 +496,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isAgentModalOpen: open !== undefined ? open : !state.isAgentModalOpen
     })),
 
-    sendMessage: async (content, regenerate = false) => {
+    sendMessage: async (content, opts) => {
+        const regenerateFromId = opts?.regenerateFromId;
         const { currentSessionId, selectedAgentId } = get();
         const allAgents = [...get().coreAgents, ...get().customAgents];
 
@@ -505,23 +506,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessionId = await get().createNewSession(selectedAgentId || undefined);
         }
 
-        // Regeneración: NO crear nuevo mensaje de usuario. En vez de eso,
-        // eliminar los mensajes del board meeting anterior (todo después del
-        // último mensaje del usuario) y reenviar la misma query.
-        if (regenerate) {
+        // Regeneración: eliminar desde el mensaje clickeado para adelante,
+        // SIN crear nuevo mensaje de usuario. El backend recibe el historial
+        // truncado y continúa naturalmente desde donde quedó.
+        if (regenerateFromId) {
             set((state) => {
                 const msgs = [...(state.messagesBySession[sessionId!] || [])];
-                // Encontrar el índice del último mensaje del usuario
-                let lastUserIdx = -1;
-                for (let i = msgs.length - 1; i >= 0; i--) {
-                    if (msgs[i].role === 'user') {
-                        lastUserIdx = i;
-                        break;
-                    }
-                }
-                // Eliminar todo lo que está después del último mensaje del usuario
-                // (el bloque de respuestas del board meeting anterior)
-                const truncated = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx + 1) : msgs;
+                const fromIdx = msgs.findIndex(m => m.id === regenerateFromId);
+                // Si no se encuentra, no tocar nada (no debería pasar)
+                const truncated = fromIdx >= 0 ? msgs.slice(0, fromIdx) : msgs;
                 return {
                     messagesBySession: {
                         ...state.messagesBySession,
@@ -794,7 +787,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     }
                 },
                 (targetRole as any) === "specialist" ? (selectedAgentId || undefined) : targetRole,
-                abortController.signal
+                abortController.signal,
+                !!regenerateFromId  // Pasar regenerate=true al backend cuando regeneramos
             );
         } catch (error: any) {
             // No reportar error si fue una cancelación intencional (Stop Generation)

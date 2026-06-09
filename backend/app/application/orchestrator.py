@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import TypedDict, Literal, List, Optional, Annotated
+from typing import TypedDict, Literal, List, Optional, Annotated, Any
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import (
     SystemMessage,
@@ -705,18 +705,32 @@ y la viabilidad técnica del CTO. Si ellos ya pidieron datos al usuario, NO los 
 
 async def board_classifier_node(state: AgentState):
     """Siempre fuerza 1 iteración. El classifier de 2 iteraciones fue removido
-    porque generaba preguntas duplicadas al usuario en la segunda ronda."""
-    max_iterations = 1
-    logger.info(f"Board meeting: forzando 1 iteración (único modo disponible)")
+    porque generaba preguntas duplicadas al usuario en la segunda ronda.
 
-    return {
+    En modo regeneración (board_regenerate=True), NO resetea board_agents_done
+    para que los agentes que ya respondieron sean salteados por el router.
+    """
+    max_iterations = 1
+    regenerate = state.get("board_regenerate", False)
+    logger.info(
+        f"Board meeting: forzando 1 iteración"
+        + (" (regeneración — preservando agents_done)" if regenerate else "")
+    )
+
+    result: dict[str, Any] = {
         "board_mode": True,
         "board_iteration": 0,
         "board_max_iterations": max_iterations,
-        "board_agents_done": [],
         "tool_calls_remaining": 3,
         "already_charged": state.get("already_charged", False),
     }
+
+    # En regeneración NO tocamos board_agents_done — el checkpoint ya tiene
+    # la lista de agentes que respondieron y la usamos para saltearlos.
+    if not regenerate:
+        result["board_agents_done"] = []
+
+    return result
 
 
 def board_agent_node_factory(role: str):
@@ -725,10 +739,30 @@ def board_agent_node_factory(role: str):
     Cada agente recibe instrucciones específicas según su posición en la cadena:
     - CEO: apertura (enmarcar, delegar, NO responder)
     - CTO/CFO/CMO: cadena (leer historial, construir sobre lo dicho, NO repetir)
+
+    Si el estado tiene board_regenerate=True, el agente se saltea si su rol ya
+    tiene mensajes en el historial (el checkpoint de LangGraph). Esto permite
+    regenerar solo el mensaje clickeado sin re-ejecutar todo el board.
     """
 
     async def board_agent_for_role(state: AgentState):
         """Ejecuta un agente en modo board meeting."""
+
+        # Regeneración: si este rol ya tiene mensajes en el historial del
+        # checkpoint, saltarlo. El router naturalmente avanza al siguiente.
+        if state.get("board_regenerate"):
+            messages = state.get("messages", [])
+            # Detectar si este rol ya tiene al menos un AIMessage en el historial.
+            # En board mode, cada agente produce un AIMessage; si ya hay uno de
+            # este rol (CEO/CTO/CFO/CMO), no lo regeneramos.
+            # Heurística: los mensajes del board NO tienen 'name' asignado por
+            # LangGraph (los produce el nodo, no el tool). Nos basamos en
+            # board_agents_done: si el rol ya está en la lista, ya habló.
+            agents_done = list(state.get("board_agents_done", []))
+            if role in agents_done:
+                logger.info(f"🔄 Board regenerate: saltando {role} (ya respondió)")
+                return {"board_agents_done": agents_done}
+
         original_prompt = state.get("system_prompt", DEFAULT_CORE_PROMPTS.get(role, ""))
 
         # Construir prompt específico según el rol en la cadena

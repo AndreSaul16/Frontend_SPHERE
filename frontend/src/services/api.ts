@@ -64,7 +64,8 @@ export const chatService = {
         sessionId: string,
         callbacks: StreamCallbacks,
         targetRole?: string,
-        signal?: AbortSignal
+        signal?: AbortSignal,
+        regenerate?: boolean
     ) {
         try {
             const token = await getAuthToken();
@@ -78,7 +79,7 @@ export const chatService = {
             const response = await fetch(`${API_URL}/stream/`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ query, session_id: sessionId, target_role: targetRole }),
+                body: JSON.stringify({ query, session_id: sessionId, target_role: targetRole, ...(regenerate && { regenerate: true }) }),
                 signal, // Permite cancelar la petición desde fuera
             });
 

@@ -13,7 +13,7 @@ El orchestrator respeta la bandera already_charged para no volver a cobrar.
 
 import json
 import re
-from typing import Optional
+from typing import Optional, Any
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -32,6 +32,7 @@ class StreamRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=10_000)
     session_id: str
     target_role: Optional[str] = None
+    regenerate: bool = False  # True cuando el frontend regenera un mensaje del board
 
 
 # Regex para validar y parsear la etiqueta de apertura
@@ -45,6 +46,7 @@ async def generate_chat_events(
     target_role: Optional[str] = None,
     board_mode: bool = False,
     board_iterations: Optional[int] = None,
+    regenerate: bool = False,
     already_charged: bool = False,
     charge_ctx = None,
     credit_manager = None,
@@ -58,6 +60,7 @@ async def generate_chat_events(
         user_id: ID del usuario (Firebase UID)
         target_role: Rol objetivo (None para grupo, "CEO"/"CTO"/etc para directo)
         board_mode: True si el usuario tiene Board Meeting activado
+        regenerate: True si el frontend está regenerando (no crear mensaje nuevo, saltar agentes ya respondidos)
         already_charged: True si el crédito ya fue cobrado en el endpoint
         charge_ctx: Contexto del cobro para refund en caso de error
         credit_manager: Instancia del CreditManager para refund
@@ -76,21 +79,25 @@ async def generate_chat_events(
 
         new_message = HumanMessage(content=query)
 
-        initial_state = {
+        # Estado inicial base sin board_agents_done — cuando es regeneración,
+        # LangGraph usa el valor del checkpoint (agentes que ya respondieron).
+        initial_state: dict[str, Any] = {
             "query": query,
             "messages": [new_message],
             "target_role": target_role,
             "user_id": user_id,
             "already_charged": already_charged,
-            # Board meeting defaults
             "board_mode": board_mode,
             "board_iteration": 0,
             "board_max_iterations": board_iterations or 1,
-            # Preferencia explícita del usuario (1 o 2). Si está, el classifier la
-            # respeta en vez de auto-decidir. None → el classifier decide.
             "board_iterations_pref": board_iterations,
-            "board_agents_done": [],
+            "board_regenerate": regenerate,
         }
+        # Solo inicializar board_agents_done en un board meeting NUEVO.
+        # En regeneración, el checkpoint ya tiene la lista correcta y la usamos
+        # para saltar agentes que ya respondieron.
+        if not regenerate:
+            initial_state["board_agents_done"] = []
 
         # Choose the right orchestrator
         active_orchestrator = board_orchestrator_app if board_mode else orchestrator_app
@@ -116,7 +123,9 @@ async def generate_chat_events(
         # Señal de inicio para la UI: ¿es un Board Meeting? Si la UI NO recibe
         # 'board_start', el board no se activó (diagnóstico claro). Además da el
         # "X entró al grupo" estilo WhatsApp.
-        if board_mode:
+        # En regeneración NO emitimos board_start: los agentes ya están en el chat
+        # y solo estamos regenerando la conclusión (o el último agente).
+        if board_mode and not regenerate:
             try:
                 yield f"data: {json.dumps({'type': 'board_start', 'agents': ['CEO', 'CTO', 'CFO', 'CMO'], 'iterations': board_iterations or 'auto'})}\n\n"
             except Exception as exc:
@@ -131,14 +140,19 @@ async def generate_chat_events(
             # Usamos on_chain_start (no on_chain_end) para que el marcador del
             # agente llegue ANTES de sus tokens; con on_chain_end llegaba tarde
             # (tras emitir ya su respuesta). Dedup por rol evita doble emisión.
+            # EXCEPCIÓN: conclusión SIEMPRE se emite (incluso si el rol es el mismo
+            # que current_board_agent), porque en regeneración el CEO se saltea y
+            # current_board_agent queda en "CEO", silenciando erróneamente la
+            # conclusión (que también mapea a CEO).
             if kind == "on_chain_start":
                 try:
                     node_name = event.get("name", "")
                     role = BOARD_NODE_ROLES.get(node_name)
-                    if role and role != current_board_agent:
+                    is_conclusion = node_name == "conclusion"
+                    if role and (role != current_board_agent or is_conclusion):
                         current_board_agent = role
                         logger.debug(f"Board meeting: {role} empieza a hablar ({node_name})")
-                        yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
+                        yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': is_conclusion})}\n\n"
                 except Exception as exc:
                     logger.debug(f"on_chain_start board marker falló: {exc}")
 
@@ -157,10 +171,12 @@ async def generate_chat_events(
                 # Fallback: si por algún motivo no llegó on_chain_start del nodo
                 # board, lo marcamos al cerrar. El dedup por rol garantiza que no
                 # se emita dos veces cuando on_chain_start sí llegó.
+                # Misma excepción que arriba: conclusión siempre se emite.
                 board_role = BOARD_NODE_ROLES.get(node_name)
-                if board_role and board_role != current_board_agent:
+                is_board_conclusion = node_name == "conclusion"
+                if board_role and (board_role != current_board_agent or is_board_conclusion):
                     current_board_agent = board_role
-                    yield f"data: {json.dumps({'type': 'board_agent', 'role': board_role, 'is_conclusion': node_name == 'conclusion'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'board_agent', 'role': board_role, 'is_conclusion': is_board_conclusion})}\n\n"
 
             # --- A2. CHAT MODEL END — acumular tokens para ajuste post-stream ---
             if kind == "on_chat_model_end":
@@ -579,6 +595,7 @@ async def chat_stream_endpoint(
                     final_target_role,
                     board_mode,
                     board_iterations=board_iterations,
+                    regenerate=request.regenerate,
                     already_charged=already_charged,
                     charge_ctx=charge_ctx,
                     credit_manager=credit_manager,
