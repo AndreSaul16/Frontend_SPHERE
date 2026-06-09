@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/useChatStore";
+import { useBillingStore } from "@/store/useBillingStore";
 import { useUserAvatar } from "@/hooks/useUserAvatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { DeployStatusIndicator } from "@/components/deploy/DeployStatusIndicator";
@@ -40,6 +41,8 @@ export function Sidebar() {
     const allAgents = [...coreAgents, ...customAgents];
     const userAvatar = useUserAvatar();
     const { user } = useAuth();
+    const { pro_messages_balance, topup_messages_balance, loaded: billingLoaded, refresh: refreshBilling } = useBillingStore();
+    const creditsTotal = pro_messages_balance + topup_messages_balance;
 
     const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -103,9 +106,10 @@ export function Sidebar() {
         setConfirmDeleteId(sessionId);
     };
 
-    // Cargar sesiones al montar
+    // Cargar sesiones y saldo de créditos al montar
     useEffect(() => {
         fetchSessions();
+        refreshBilling();
     }, []);
 
 
@@ -297,8 +301,20 @@ export function Sidebar() {
                     onClick={() => toggleSidebar(false)}
                     className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-surface/40 border border-transparent hover:border-surface-highlight transition-all text-sm"
                 >
-                    <CreditCard className="h-4 w-4" />
-                    <span>Facturación</span>
+                    <CreditCard className="h-4 w-4 shrink-0" />
+                    <span className="flex-1">Facturación</span>
+                    {billingLoaded && (
+                        <span className="flex items-center gap-1 font-mono text-xs shrink-0">
+                            <span className={cn(
+                                creditsTotal === 0 ? "text-rose-400" : creditsTotal < 10 ? "text-red-400" : "text-electric-cyan"
+                            )}>
+                                {pro_messages_balance}
+                            </span>
+                            {topup_messages_balance > 0 && (
+                                <span className="text-emerald-400">+{topup_messages_balance}</span>
+                            )}
+                        </span>
+                    )}
                 </Link>
                 <DeployStatusIndicator />
                 <Link

@@ -289,7 +289,7 @@ export function ChatPanel() {
         <div className="flex flex-col h-full bg-transparent relative overflow-hidden">
             {/* Header */}
             <header className="h-20 pl-14 lg:pl-8 pr-6 border-b border-white/5 flex items-center justify-between bg-midnight/40 backdrop-blur-xl z-20">
-                <div className="flex items-center gap-4 min-w-0 flex-1">
+                <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
                     <div className="relative">
                         <motion.div
                             layoutId="active-agent-avatar"
@@ -317,9 +317,9 @@ export function ChatPanel() {
                                 {role}
                             </span>
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                            <ShieldCheck className="h-3 w-3 text-emerald-500/50" />
-                            <p className="text-[10px] text-gray-500 font-mono uppercase tracking-tighter">
+                        <div className="flex items-center gap-2 mt-0.5 min-w-0">
+                            <ShieldCheck className="h-3 w-3 text-emerald-500/50 shrink-0" />
+                            <p className="text-[10px] text-gray-500 font-mono uppercase tracking-tighter truncate">
                                 {isGroupChat
                                     ? `${groupMembers.length} Expertos Activos`
                                     : "Canal Encriptado de Extremo a Extremo"}
@@ -328,8 +328,11 @@ export function ChatPanel() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                    <CreditsIndicator className="mr-2" />
+                <div className="flex items-center gap-1 shrink-0">
+                    {/* Saldo de créditos: en pantallas estrechas vive en la Sidebar (menú hamburguesa) */}
+                    <div className="hidden lg:flex mr-2">
+                        <CreditsIndicator />
+                    </div>
                     <button onClick={() => setIsSearchOpen(v => !v)} className={cn("p-2 rounded-xl hover:bg-white/5 transition-all active-scale", isSearchOpen ? "text-electric-cyan" : "text-gray-500 hover:text-white")} title="Buscar">
                         <Search className="h-4 w-4" />
                     </button>
