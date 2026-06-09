@@ -29,14 +29,10 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Permisos para que el entrypoint default pueda escribir confs procesados.
 RUN chown -R nginx:nginx /usr/share/nginx/html
 
-# Install curl for HEALTHCHECK (nginx:alpine base lacks it)
-RUN apk add --no-cache curl
-
-# Default si Railway no inyecta PORT (dev local).
+# Railway handles healthcheck via healthcheckPath in railway.toml.
+# No Docker HEALTHCHECK — it races with nginx startup and conflicts with Railway's own probe.
 ENV PORT=3000
 
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:${PORT:-3000}/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
