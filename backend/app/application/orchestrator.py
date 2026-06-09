@@ -780,8 +780,19 @@ def board_agent_node_factory(role: str):
 
         # Construir prompt específico según el rol en la cadena
         if role == "CEO":
-            # CEO opener: instrucciones de apertura + instrucciones generales
-            board_prompt = original_prompt + BOARD_CEO_OPENER + BOARD_SYSTEM_PROMPT_ADDITION
+            # CEO opener: instrucciones de apertura + instrucciones generales.
+            # BUG FIX: DEFAULT_CORE_PROMPTS["CEO"] contiene "SIEMPRE sintetiza y
+            # entrega una conclusión ejecutiva al usuario" que contradice BOARD_CEO_OPENER
+            # ("NO RESPONDAS LA PREGUNTA DEL USUARIO"). Strippeamos las instrucciones
+            # de entrega directa para que el board prompt controle el protocolo de
+            # respuesta. El CEO mantiene su identidad, personalidad y herramientas.
+            board_base = original_prompt.replace(
+                "Después de delegar y recibir respuestas del equipo, SIEMPRE sintetiza "
+                "y entrega una conclusión ejecutiva al usuario. No repitas lo que dijo "
+                "cada agente — consolida en un plan de acción con pasos claros.\n",
+                ""
+            )
+            board_prompt = board_base + BOARD_CEO_OPENER + BOARD_SYSTEM_PROMPT_ADDITION
         else:
             # Directores: instrucciones de cadena específicas + instrucciones generales
             chain_instructions = BOARD_DIRECTOR_CHAIN.get(role, "")
