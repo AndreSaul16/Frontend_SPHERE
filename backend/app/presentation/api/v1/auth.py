@@ -617,9 +617,9 @@ async def update_board_settings(
     if body.board_meeting_enabled is not None:
         update_data["board_meeting_enabled"] = body.board_meeting_enabled
     if body.board_iterations is not None:
-        if body.board_iterations not in (1, 2):
+        if body.board_iterations != 1:
             raise HTTPException(
-                status_code=400, detail="board_iterations debe ser 1 o 2"
+                status_code=400, detail="board_iterations solo acepta 1 (único modo disponible)"
             )
         update_data["board_iterations"] = body.board_iterations
 

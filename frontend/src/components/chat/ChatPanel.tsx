@@ -422,7 +422,7 @@ export function ChatPanel() {
                                         rating={ratings[msg.id] || null}
                                         onPin={() => handlePin(msg.id)}
                                         onRate={(r) => handleRate(msg.id, r)}
-                                        onRegenerate={!msg.role.includes('user') && idx === filteredMessages.length - 1 ? () => sendMessage(messages.filter(m => m.role === 'user').pop()?.content || '') : undefined}
+                                        onRegenerate={!msg.role.includes('user') && idx === filteredMessages.length - 1 ? () => sendMessage(messages.filter(m => m.role === 'user').pop()?.content || '', true) : undefined}
                                     />
                                 );
                             })}

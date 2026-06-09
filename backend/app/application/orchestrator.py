@@ -704,20 +704,10 @@ y la viabilidad técnica del CTO. Si ellos ya pidieron datos al usuario, NO los 
 
 
 async def board_classifier_node(state: AgentState):
-    """Clasifica el mensaje como trivial o complejo para board meeting."""
-    from app.application.board_classifier import classify_board_message
-
-    query = state["query"]
-
-    # Preferencia explícita del usuario (1 o 2) tiene prioridad sobre el classifier.
-    user_pref = state.get("board_iterations_pref")
-    if isinstance(user_pref, int) and user_pref >= 1:
-        max_iterations = min(user_pref, 2)
-        logger.info(f"Board meeting: usando preferencia del usuario → {max_iterations} iteraciones")
-    else:
-        classification = await classify_board_message(query)
-        max_iterations = 2 if classification == "complex" else 1
-        logger.info(f"Board meeting: {classification} → {max_iterations} iteraciones (auto)")
+    """Siempre fuerza 1 iteración. El classifier de 2 iteraciones fue removido
+    porque generaba preguntas duplicadas al usuario en la segunda ronda."""
+    max_iterations = 1
+    logger.info(f"Board meeting: forzando 1 iteración (único modo disponible)")
 
     return {
         "board_mode": True,

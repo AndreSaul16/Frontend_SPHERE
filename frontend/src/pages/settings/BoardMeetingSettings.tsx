@@ -74,10 +74,6 @@ export function BoardMeetingSettings() {
     await updateSettings({ board_meeting_enabled: true });
   };
 
-  const handleIterationsChange = async (iterations: number) => {
-    await updateSettings({ board_iterations: iterations });
-  };
-
   const updateSettings = async (updates: Partial<BoardSettings>) => {
     setSaving(true);
     setError(null);
@@ -169,54 +165,17 @@ export function BoardMeetingSettings() {
           </button>
         </div>
 
-        {/* Iterations selector (only visible when enabled) */}
+        {/* Token cost info — solo cuando está activado */}
         {settings.board_meeting_enabled && (
-          <div className="space-y-3 pt-3 border-t border-surface-highlight">
-            <div>
-              <h4 className="text-sm font-medium text-text-primary mb-2">
-                Iteraciones por mensaje
-              </h4>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleIterationsChange(1)}
-                  disabled={saving}
-                  className={`flex-1 p-3 rounded-xl border text-sm font-medium transition-all ${
-                    settings.board_iterations === 1
-                      ? "bg-electric-cyan/10 border-electric-cyan/30 text-electric-cyan"
-                      : "bg-surface/50 border-surface-highlight text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  <div className="font-semibold">1 iteración</div>
-                  <div className="text-xs mt-1 opacity-70">
-                    Todos participan, CEO concluye
-                  </div>
-                </button>
-                <button
-                  onClick={() => handleIterationsChange(2)}
-                  disabled={saving}
-                  className={`flex-1 p-3 rounded-xl border text-sm font-medium transition-all ${
-                    settings.board_iterations === 2
-                      ? "bg-electric-cyan/10 border-electric-cyan/30 text-electric-cyan"
-                      : "bg-surface/50 border-surface-highlight text-text-secondary hover:text-text-primary"
-                  }`}
-                >
-                  <div className="font-semibold">2 iteraciones</div>
-                  <div className="text-xs mt-1 opacity-70">
-                    Discusión profunda + refinamiento
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* Token cost info */}
+          <div className="pt-3 border-t border-surface-highlight">
             <div className="flex items-start gap-2 p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/20">
               <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 flex-shrink-0" />
               <div className="text-xs text-text-secondary">
                 <p className="font-medium text-yellow-400 mb-1">Consumo de tokens</p>
                 <p>
-                  {settings.board_iterations === 1
-                    ? "1 iteración = ~5 llamadas al LLM (~15k tokens por mensaje)"
-                    : "2 iteraciones = ~8 llamadas al LLM (~25k tokens por mensaje)"}
+                  1 iteración = ~5 llamadas al LLM (~15k tokens por mensaje).
+                  Todos los directores participan: CEO abre, CTO/CFO/CMO analizan,
+                  CEO concluye.
                 </p>
                 <p className="mt-1">
                   Se activa solo en sesiones de "Junta Directiva". Los chats individuales
@@ -249,7 +208,9 @@ export function BoardMeetingSettings() {
                 (donde solo responde un agente).
               </p>
               <p>
-                Puedes configurar 1 o 2 iteraciones después de activar.
+                Todos los agentes participan en una sola ronda de análisis:
+                CEO abre la discusión, CTO, CFO y CMO aportan sus perspectivas,
+                y el CEO concluye con una síntesis ejecutiva.
               </p>
             </div>
 

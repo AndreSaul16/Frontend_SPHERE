@@ -34,7 +34,7 @@ interface ChatState {
     loadSession: (sessionId: string) => Promise<void>;
     selectAgent: (agentId: string) => void;
     toggleSidebar: (open?: boolean) => void;
-    sendMessage: (content: string) => Promise<void>;
+    sendMessage: (content: string, regenerate?: boolean) => Promise<void>;
     stopGeneration: () => void;
     toggleArtifactPanel: () => void;
     renameAgent: (id: string, newName: string) => void;
@@ -496,7 +496,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         isAgentModalOpen: open !== undefined ? open : !state.isAgentModalOpen
     })),
 
-    sendMessage: async (content) => {
+    sendMessage: async (content, regenerate = false) => {
         const { currentSessionId, selectedAgentId } = get();
         const allAgents = [...get().coreAgents, ...get().customAgents];
 
@@ -505,22 +505,50 @@ export const useChatStore = create<ChatState>((set, get) => ({
             sessionId = await get().createNewSession(selectedAgentId || undefined);
         }
 
-        const userMsg: Message = {
-            id: uuidv4(),
-            role: 'user',
-            content,
-            timestamp: new Date(),
-        };
+        // Regeneración: NO crear nuevo mensaje de usuario. En vez de eso,
+        // eliminar los mensajes del board meeting anterior (todo después del
+        // último mensaje del usuario) y reenviar la misma query.
+        if (regenerate) {
+            set((state) => {
+                const msgs = [...(state.messagesBySession[sessionId!] || [])];
+                // Encontrar el índice del último mensaje del usuario
+                let lastUserIdx = -1;
+                for (let i = msgs.length - 1; i >= 0; i--) {
+                    if (msgs[i].role === 'user') {
+                        lastUserIdx = i;
+                        break;
+                    }
+                }
+                // Eliminar todo lo que está después del último mensaje del usuario
+                // (el bloque de respuestas del board meeting anterior)
+                const truncated = lastUserIdx >= 0 ? msgs.slice(0, lastUserIdx + 1) : msgs;
+                return {
+                    messagesBySession: {
+                        ...state.messagesBySession,
+                        [sessionId!]: truncated,
+                    },
+                    streamingSessionIds: [...state.streamingSessionIds, sessionId!],
+                    errorStates: { ...state.errorStates, send_message: null },
+                };
+            });
+        } else {
+            // Flujo normal: crear nuevo mensaje de usuario
+            const userMsg: Message = {
+                id: uuidv4(),
+                role: 'user',
+                content,
+                timestamp: new Date(),
+            };
 
-        // Añadir al historial de la sesión específica
-        set((state) => ({
-            messagesBySession: {
-                ...state.messagesBySession,
-                [sessionId!]: [...(state.messagesBySession[sessionId!] || []), userMsg]
-            },
-            streamingSessionIds: [...state.streamingSessionIds, sessionId!],
-            errorStates: { ...state.errorStates, send_message: null } // Clear previous error
-        }));
+            set((state) => ({
+                messagesBySession: {
+                    ...state.messagesBySession,
+                    [sessionId!]: [...(state.messagesBySession[sessionId!] || []), userMsg]
+                },
+                streamingSessionIds: [...state.streamingSessionIds, sessionId!],
+                errorStates: { ...state.errorStates, send_message: null }
+            }));
+        }
 
         try {
             const selectedAgent = allAgents.find(a => a.id === selectedAgentId);
