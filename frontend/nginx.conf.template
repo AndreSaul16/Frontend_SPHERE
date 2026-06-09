@@ -14,7 +14,7 @@ server {
     # Must be in server context so it applies to ALL locations, including regex-matched JS/CSS assets.
     sub_filter_types application/javascript text/html;
     sub_filter '__VITE_API_URL__' '${VITE_API_URL}';
-    sub_filter_once on;
+    sub_filter_once off;
 
     # SPA fallback — all routes serve index.html
     location / {
