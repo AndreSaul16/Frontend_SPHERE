@@ -10,8 +10,17 @@ RUN npm ci
 # Copy source and build
 COPY . .
 
-# Build with placeholder; nginx substitutes real URL at container start
-RUN VITE_API_URL=__VITE_API_URL__ npm run build
+# Build with placeholder; nginx substitutes real URL at container start.
+# VITE_FIREBASE_* must be present at BUILD time (Vite embeds them into the bundle).
+# Railway service variables are runtime-only; we pass Firebase config explicitly here.
+RUN VITE_API_URL=__VITE_API_URL__ \
+    VITE_FIREBASE_API_KEY=AIzaSyBogAXbPBKAtdogyXPiBinv6e_d2PWX_Sg \
+    VITE_FIREBASE_AUTH_DOMAIN=sphere-2a4cf.firebaseapp.com \
+    VITE_FIREBASE_PROJECT_ID=sphere-2a4cf \
+    VITE_FIREBASE_STORAGE_BUCKET=sphere-2a4cf.firebasestorage.app \
+    VITE_FIREBASE_MESSAGING_SENDER_ID=1018425350443 \
+    VITE_FIREBASE_APP_ID=1:1018425350443:web:9e32ead8592800594d8d6e \
+    npm run build
 
 # ---- Stage 2: Production (nginx) ----
 FROM nginx:alpine
