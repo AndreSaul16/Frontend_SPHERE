@@ -122,19 +122,29 @@ export function ChatPanel() {
     const handlePin = useCallback(async (messageId: string) => {
         if (!currentSessionId) return;
         const isPinned = pinnedMessages.includes(messageId);
-        if (isPinned) {
-            await chatService.unpinMessage(currentSessionId, messageId);
-            setPinnedMessages(prev => prev.filter(id => id !== messageId));
-        } else {
-            await chatService.pinMessage(currentSessionId, messageId);
-            setPinnedMessages(prev => [...prev, messageId]);
+        // El estado solo se actualiza si el backend confirma (A5): así un fallo no
+        // deja un pin "fantasma" que desaparece al recargar.
+        try {
+            if (isPinned) {
+                await chatService.unpinMessage(currentSessionId, messageId);
+                setPinnedMessages(prev => prev.filter(id => id !== messageId));
+            } else {
+                await chatService.pinMessage(currentSessionId, messageId);
+                setPinnedMessages(prev => [...prev, messageId]);
+            }
+        } catch (e) {
+            console.error('No se pudo actualizar el pin:', e);
         }
     }, [currentSessionId, pinnedMessages]);
 
     const handleRate = useCallback(async (messageId: string, rating: 'up' | 'down') => {
         if (!currentSessionId) return;
-        await chatService.rateMessage(currentSessionId, messageId, rating);
-        setRatings(prev => ({ ...prev, [messageId]: rating }));
+        try {
+            await chatService.rateMessage(currentSessionId, messageId, rating);
+            setRatings(prev => ({ ...prev, [messageId]: rating }));
+        } catch (e) {
+            console.error('No se pudo guardar la valoración:', e);
+        }
     }, [currentSessionId]);
 
     const handleExport = useCallback(() => {
@@ -174,12 +184,20 @@ export function ChatPanel() {
         return <span className={cn("font-black text-xl", activeAgent?.color)}>{activeAgent?.avatar || 'S'}</span>;
     };
 
-    const handleSendMessage = () => {
-        if (!inputValue.trim()) return;
-        sendMessage(inputValue);
+    const handleSendMessage = async () => {
+        const text = inputValue.trim();
+        if (!text) return;
+        // Limpiamos el input optimistamente. El decremento de créditos lo hace
+        // streamChat una sola vez tras confirmar que el backend aceptó el envío
+        // (A4: antes se decrementaba aquí Y en streamChat → -2 por mensaje).
         setInputValue("");
-        // Decremento optimista del balance de mensajes
-        useBillingStore.getState().decrementOptimistic();
+        await sendMessage(text);
+        // A8: si el envío falló, devolvemos el texto al input para que el usuario
+        // pueda reintentar sin reescribir (sin pisar lo que ya esté tecleando).
+        const sendError = useChatStore.getState().errorStates.send_message;
+        if (sendError) {
+            setInputValue((cur) => cur || text);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

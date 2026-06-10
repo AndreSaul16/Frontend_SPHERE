@@ -148,9 +148,16 @@ export function handleError(err: AppError): AppError {
             break;
         case 'auth.invalid_token':
         case 'auth.expired_token':
-            // Redirect a login. Mejor que reload pero por ahora simple.
+            // Limpiar TODO el estado del usuario antes de redirigir (A6): si no,
+            // en un navegador compartido el siguiente login vería datos de la
+            // cuenta anterior hasta que los stores se recarguen.
             if (typeof window !== 'undefined') {
-                window.location.href = '/';
+                import('../lib/clearStores').then(({ clearUserStores }) => {
+                    clearUserStores();
+                    window.location.href = '/';
+                }).catch(() => {
+                    window.location.href = '/';
+                });
             }
             break;
         case 'common.rate_limited':

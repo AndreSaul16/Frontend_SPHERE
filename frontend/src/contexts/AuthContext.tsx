@@ -101,6 +101,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await firebaseSignOut(auth);
     setUser(null);
     setIdToken(null);
+    // Limpiar estado del usuario para no filtrar datos a la siguiente cuenta (A6).
+    const { clearUserStores } = await import("@/lib/clearStores");
+    clearUserStores();
   }, []);
 
   return (

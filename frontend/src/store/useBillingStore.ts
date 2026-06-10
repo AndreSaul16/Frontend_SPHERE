@@ -25,7 +25,8 @@ interface BillingState {
   refresh: () => Promise<void>;
   openPaywall: (reason: PaywallReason) => void;
   closePaywall: () => void;
-  decrementOptimistic: () => void;
+  decrementOptimistic: (cost?: number) => void;
+  reset: () => void;
 }
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -158,13 +159,40 @@ export const useBillingStore = create<BillingState>()(
         set({ paywall: { open: false, reason: null } });
       },
 
-      decrementOptimistic: () => {
+      // Decremento optimista del saldo. `cost` = créditos del envío (1 chat normal,
+      // 5 un board meeting). Se descuenta primero de pro_messages y el resto de
+      // top-ups, reflejando el orden de cobro del backend (A4).
+      decrementOptimistic: (cost = 1) => {
         const state = get();
-        if (state.pro_messages_balance > 0) {
-          set({ pro_messages_balance: state.pro_messages_balance - 1 });
-        } else if (state.topup_messages_balance > 0) {
-          set({ topup_messages_balance: state.topup_messages_balance - 1 });
+        let remaining = cost;
+        let pro = state.pro_messages_balance;
+        let topup = state.topup_messages_balance;
+
+        const fromPro = Math.min(pro, remaining);
+        pro -= fromPro;
+        remaining -= fromPro;
+        if (remaining > 0) {
+          topup = Math.max(0, topup - remaining);
         }
+        set({ pro_messages_balance: pro, topup_messages_balance: topup });
+      },
+
+      // Limpia el saldo al cambiar de cuenta / expirar sesión (A6).
+      reset: () => {
+        set({
+          plan_id: 'free',
+          status: 'active',
+          pro_messages_balance: 0,
+          topup_messages_balance: 0,
+          current_period_end: null,
+          cancel_at_period_end: false,
+          rag_storage_bytes_used: 0,
+          custom_agents_count: 0,
+          loaded: false,
+          isLoading: false,
+          error: null,
+          paywall: { open: false, reason: null },
+        });
       },
     }),
     { name: 'BillingStore' }

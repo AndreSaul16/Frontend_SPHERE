@@ -824,10 +824,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
     },
     resetState: () => set({
+        // Limpia TODO lo específico del usuario para evitar fuga de datos entre
+        // cuentas en un navegador compartido (A6). Los coreAgents son globales
+        // (CEO/CTO/...), así que se conservan.
         messagesBySession: {},
         artifacts: [],
         currentSessionId: null,
+        selectedAgentId: null,
         streamingSessionIds: [],
+        sessions: [],
+        customAgents: [],
+        sessionsByAgent: {},
+        activeArtifactId: null,
+        streamingArtifactBySession: {},
         errorStates: {
             fetch_agents: null,
             create_session: null,

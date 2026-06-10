@@ -196,6 +196,12 @@ export const chatService = {
                 return;
             }
             console.error("🔥 Error en streamChat:", error);
+            // A4: reconciliar el balance con el backend también en error. Si el
+            // envío falló, el backend reembolsó (o nunca cobró), así que el
+            // decremento optimista debe corregirse YA, no esperar al polling.
+            import('../store/useBillingStore').then(({ useBillingStore }) => {
+                useBillingStore.getState().refresh();
+            });
             callbacks.onError?.(error);
         }
     },
@@ -372,36 +378,43 @@ export const chatService = {
     },
 
     // --- PINS ---
+    // A5: todos comprueban response.ok. Antes fallaban en silencio: la UI cambiaba
+    // optimista pero el backend nunca guardaba → el pin/rating "desaparecía" al
+    // recargar. Ahora lanzan para que el componente revierta y avise.
     async pinMessage(sessionId: string, messageId: string): Promise<void> {
-        await fetch(`${API_URL}/sessions/${sessionId}/pins`, {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}/pins`, {
             method: 'POST',
             headers: await authHeaders(),
             body: JSON.stringify({ message_id: messageId })
         });
+        if (!response.ok) throw new Error(`Error pinning message: ${response.status}`);
     },
 
     async unpinMessage(sessionId: string, messageId: string): Promise<void> {
-        await fetch(`${API_URL}/sessions/${sessionId}/pins/${messageId}`, {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}/pins/${messageId}`, {
             method: 'DELETE',
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error unpinning message: ${response.status}`);
     },
 
     async getPins(sessionId: string): Promise<string[]> {
         const response = await fetch(`${API_URL}/sessions/${sessionId}/pins`, {
             headers: await authHeaders(),
         });
+        if (!response.ok) throw new Error(`Error fetching pins: ${response.status}`);
         const data = await response.json();
         return data.pinned_messages || [];
     },
 
     // --- RATINGS ---
     async rateMessage(sessionId: string, messageId: string, rating: 'up' | 'down', feedback?: string): Promise<void> {
-        await fetch(`${API_URL}/sessions/${sessionId}/ratings`, {
+        const response = await fetch(`${API_URL}/sessions/${sessionId}/ratings`, {
             method: 'POST',
             headers: await authHeaders(),
             body: JSON.stringify({ message_id: messageId, rating, feedback })
         });
+        if (!response.ok) throw new Error(`Error rating message: ${response.status}`);
     }
 };
 
