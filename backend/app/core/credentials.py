@@ -4,45 +4,69 @@ Cifra tokens con Fernet antes de guardarlos en MongoDB.
 Maneja fetch, store, refresh y revoke de tokens por usuario y provider.
 """
 
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, MultiFernet, InvalidToken
 from app.core.config import settings
 from app.infrastructure.database import get_oauth_credentials_collection
 from app.core.logger import api_logger as logger
+
+
+def _key_version(key: str) -> str:
+    """Huella corta y estable de una clave Fernet (no reversible).
+    Permite saber con qué clave se cifró un documento sin exponer la clave,
+    para futuras migraciones de re-cifrado tras una rotación."""
+    return hashlib.sha256(key.encode()).hexdigest()[:8]
 
 
 class CredentialsService:
     """
     Broker de credenciales: el backend es la única fuente de verdad.
     Los tokens se cifran con Fernet antes de escribir a MongoDB.
+
+    Rotación de claves (A35): usa MultiFernet con la lista FERNET_KEYS.
+    Cifra siempre con la PRIMERA clave; descifra probando todas. Para rotar,
+    se antepone la clave nueva y se conserva la vieja hasta re-cifrar los datos.
     """
 
     def __init__(self):
-        if not settings.FERNET_KEY:
+        keys = settings.fernet_keys_list
+        if not keys:
             logger.warning(
-                "FERNET_KEY no configurado. "
+                "FERNET_KEY/FERNET_KEYS no configurado. "
                 "Las credenciales NO estarán cifradas (modo desarrollo)."
             )
             self._fernet = None
+            self._key_version = "plain"
         else:
-            self._fernet = Fernet(settings.FERNET_KEY.encode())
+            self._fernet = MultiFernet([Fernet(k.encode()) for k in keys])
+            # La versión activa es la de la PRIMERA clave (la que cifra).
+            self._key_version = _key_version(keys[0])
+
+    @property
+    def key_version(self) -> str:
+        """Versión de la clave activa (la que se usa para cifrar nuevos datos)."""
+        return self._key_version
 
     def _encrypt(self, token: str) -> bytes:
-        """Cifra un token con Fernet."""
+        """Cifra un token con la clave Fernet activa."""
         if not self._fernet:
             return token.encode()  # Sin cifrado en modo dev
         return self._fernet.encrypt(token.encode())
 
     def _decrypt(self, encrypted: bytes) -> str:
-        """Descifra un token cifrado con Fernet."""
+        """Descifra un token probando todas las claves configuradas."""
         if not self._fernet:
             return encrypted.decode()  # Sin descifrado en modo dev
         try:
             return self._fernet.decrypt(encrypted).decode()
         except InvalidToken:
-            logger.error("Token Fernet inválido — posible cambio de FERNET_KEY")
+            logger.error(
+                "Token Fernet inválido — la clave que lo cifró no está en "
+                "FERNET_KEYS. Si acabas de rotar, conserva la clave anterior."
+            )
             raise ValueError("No se pudo descifrar la credencial")
 
     async def get_token(self, user_id: str, provider: str) -> Optional[str]:
@@ -104,6 +128,7 @@ class CredentialsService:
             "expires_at": expires_at,
             "connected_at": now,
             "revoked_at": None,
+            "key_version": self._key_version,
         }
 
         await col.update_one(
@@ -282,6 +307,7 @@ class CredentialsService:
             "metadata": metadata or {},
             "updated_at": now,
             "revoked_at": None,
+            "key_version": self._key_version,
         }
 
         await col.update_one(
@@ -412,6 +438,7 @@ class CredentialsService:
             "scopes": scopes or [],
             "updated_at": now,
             "revoked_at": None,
+            "key_version": self._key_version,
         }
 
         await col.update_one(

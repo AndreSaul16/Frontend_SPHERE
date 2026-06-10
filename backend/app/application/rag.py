@@ -133,37 +133,22 @@ def _retrieve_context_sync(
 
     except Exception as e:
         error_str = str(e)
-        logger.error(f"Error en RAG: {error_str}")
 
-        # Si el error es por índice faltante, intentar sin filtro de user_id
-        if "needs to be indexed as filter" in error_str and user_id:
-            logger.warning(
-                "Vector search index no tiene user_id configurado. Reintentando sin filtro multi-tenant."
+        # SEGURIDAD MULTI-TENANT: si el índice no soporta el filtro por user_id,
+        # NO reintentamos sin filtro (eso leakearía documentos de otros usuarios al
+        # LLM). Fail-closed: devolvemos un mensaje neutro y elevamos un log CRITICAL
+        # para que el operador arregle la definición del índice en Atlas
+        # (vector_index debe declarar user_id como filter field).
+        if "needs to be indexed as filter" in error_str:
+            logger.critical(
+                "RAG MULTI-TENANT: el índice 'vector_index' no tiene 'user_id' como "
+                "filter field. Búsqueda abortada para NO leakear documentos cross-user. "
+                "Acción requerida: actualizar la definición del índice en Atlas "
+                "(ver backend/scripts/vector_index_definition.json). user_id=%s",
+                user_id,
             )
-            try:
-                fallback_pipeline = [
-                    {
-                        "$vectorSearch": {
-                            "index": "vector_index",
-                            "path": "embedding",
-                            "queryVector": query_vector,
-                            "numCandidates": 100,
-                            "limit": limit,
-                        }
-                    },
-                    {"$project": {"_id": 0, "title": 1, "content_markdown": 1}},
-                ]
-                results = list(collection.aggregate(fallback_pipeline))
-                if results:
-                    context_str = ""
-                    for doc in results:
-                        snippet = doc.get("content_markdown", "")[:2000]
-                        context_str += (
-                            f"---\nFUENTE: {doc.get('title')}\nCONTENIDO: {snippet}\n\n"
-                        )
-                    return context_str
-            except Exception as e2:
-                logger.error(f"RAG fallback también falló: {e2}")
+        else:
+            logger.error(f"Error en RAG: {error_str}")
 
         return "Error recuperando contexto de la base de datos."
 

@@ -80,6 +80,17 @@ def _validate_env_vars():
             "El frontend usará stripe_configured=false para ocultar la UI de pagos."
         )
 
+    # N8N_WEBHOOK_SECRET (auditoría A11): si está vacío, las firmas HMAC de los
+    # webhooks n8n se calculan con secreto vacío → trivialmente falsificables.
+    # No es bloqueante (un deploy puede no usar integraciones n8n), pero en
+    # producción es un agujero de seguridad real: log CRITICAL para que se vea.
+    if settings.is_production and not (settings.N8N_WEBHOOK_SECRET or "").strip():
+        logger.critical(
+            "N8N_WEBHOOK_SECRET vacío en PRODUCCIÓN. Las firmas HMAC de los webhooks "
+            "n8n no protegen nada (secreto vacío = firma falsificable). Si usas "
+            "integraciones n8n, configura N8N_WEBHOOK_SECRET en Railway YA."
+        )
+
     missing_prod = [k for k, v in prod_critical.items() if not v]
     # Firebase: vale FIREBASE_CREDENTIALS_JSON (Railway) o FIREBASE_CREDENTIALS_PATH (archivo).
     if not (settings.FIREBASE_CREDENTIALS_JSON or settings.FIREBASE_CREDENTIALS_PATH):

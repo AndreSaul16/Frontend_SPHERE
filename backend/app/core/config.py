@@ -32,8 +32,14 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = ""
     FIREBASE_CREDENTIALS_JSON: str = ""  # Contenido del JSON (Railway-friendly)
 
-    # Cifrado de tokens OAuth en reposo
+    # Cifrado de tokens OAuth en reposo.
+    # FERNET_KEY: clave principal (retrocompat).
+    # FERNET_KEYS: lista separada por comas, la PRIMERA es la activa (cifra) y el
+    # resto son claves antiguas que aún deben poder DESCIFRAR datos existentes.
+    # Para rotar: pones la nueva clave al frente de FERNET_KEYS, dejas la vieja
+    # detrás; cuando todos los datos estén re-cifrados, eliminas la vieja.
     FERNET_KEY: str = ""
+    FERNET_KEYS: str = ""
 
     # OAuth (BYO): cada usuario registra su propia OAuth app (client_id/secret),
     # cifrada por-usuario en la colección user_oauth_apps. NO hay client_id/secret
@@ -110,6 +116,20 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def fernet_keys_list(self) -> list[str]:
+        """Claves Fernet en orden de prioridad (la primera cifra; todas descifran).
+        Combina FERNET_KEYS (lista) y FERNET_KEY (legacy) sin duplicar."""
+        keys: list[str] = []
+        for k in (self.FERNET_KEYS or "").split(","):
+            k = k.strip()
+            if k and k not in keys:
+                keys.append(k)
+        legacy = (self.FERNET_KEY or "").strip()
+        if legacy and legacy not in keys:
+            keys.append(legacy)
+        return keys
 
     @property
     def is_production(self) -> bool:
