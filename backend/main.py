@@ -230,6 +230,18 @@ async def _ensure_indexes():
         [("user_id", ASCENDING), ("created_at", DESCENDING)], background=True
     )
 
+    # Credit transactions: índice único parcial sobre stripe_event_id.
+    # Hace que cada grant ligado a un evento Stripe sea idempotente: un retry del
+    # webhook no puede insertar dos veces la misma transacción → no doble-grant
+    # (auditoría A2). Parcial para no colisionar en transacciones sin event_id.
+    tx_col = db.get_async_db()["credit_transactions"]
+    await tx_col.create_index(
+        [("stripe_event_id", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"stripe_event_id": {"$exists": True}},
+        background=True,
+    )
+
     logger.info("Índices de MongoDB verificados/creados")
 
 

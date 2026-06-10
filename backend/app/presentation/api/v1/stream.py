@@ -28,6 +28,43 @@ from app.core.logger import stream_logger as logger
 router = APIRouter()
 
 
+async def _safe_refund(credit_manager, charge_ctx, user_id: str, reason: str) -> None:
+    """Reembolsa créditos garantizando que un fallo del refund NO deje al usuario
+    sin sus créditos en silencio (A3). Si el refund lanza, registramos la deuda en
+    la colección `pending_refunds` para reintentarla luego y poder compensar.
+    """
+    if not (credit_manager and charge_ctx):
+        return
+    try:
+        await credit_manager.arefund(charge_ctx, reason=reason)
+        logger.info(f"♻️ Crédito reembolsado ({reason}): {user_id}")
+    except Exception as refund_error:
+        logger.error(f"Refund falló ({reason}) para {user_id}: {refund_error}")
+        try:
+            from datetime import datetime, timezone
+            from app.infrastructure.database import db
+            from app.core.config import settings as _settings
+
+            db.get_sync_client()[_settings.DB_NAME]["pending_refunds"].insert_one({
+                "user_id": user_id,
+                "reason": reason,
+                "charge_ctx": str(charge_ctx),
+                "error": str(refund_error),
+                "resolved": False,
+                "created_at": datetime.now(timezone.utc),
+            })
+            logger.critical(
+                f"Refund pendiente registrado para {user_id} (reason={reason}). "
+                "Revisar colección pending_refunds para compensar."
+            )
+        except Exception as persist_error:
+            # Último recurso: log CRITICAL para no perder el rastro.
+            logger.critical(
+                f"NO se pudo registrar pending_refund para {user_id} "
+                f"(reason={reason}): {persist_error}. Crédito potencialmente perdido."
+            )
+
+
 class StreamRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=10_000)
     session_id: str
@@ -375,21 +412,14 @@ async def generate_chat_events(
 
     except GeneratorExit:
         logger.info(f"🛑 Cliente desconectado (Stop Generation): {session_id}")
-        if already_charged and charge_ctx and credit_manager is not None:
-            try:
-                await credit_manager.arefund(charge_ctx, reason="client_disconnected")
-                logger.info(f"♻️ Crédito reembolsado por desconexión del cliente: {user_id}")
-            except Exception as refund_error:
-                logger.error(f"Error reembolsando crédito en desconexión: {refund_error}")
+        if already_charged:
+            await _safe_refund(credit_manager, charge_ctx, user_id, "client_disconnected")
         return
     except Exception as e:
-        # Refund on error: si ya cobramos el crédito, devolverlo
-        if already_charged and charge_ctx and credit_manager is not None:
-            try:
-                await credit_manager.arefund(charge_ctx, reason="inference_failed")
-                logger.info(f"♻️ Crédito reembolsado por error en stream: {user_id}")
-            except Exception as refund_error:
-                logger.error(f"Error refunding credits in stream: {refund_error}")
+        # Refund on error: si ya cobramos el crédito, devolverlo (sin perderlo en
+        # silencio si el propio refund falla — ver _safe_refund).
+        if already_charged:
+            await _safe_refund(credit_manager, charge_ctx, user_id, "inference_failed")
         error = safe_error_response(e)
         yield f"data: {json.dumps({'type': 'error', 'message': error['message']})}\n\n"
         yield "data: [DONE]\n\n"
@@ -552,6 +582,22 @@ async def chat_stream_endpoint(
                 detail={"error": "insufficient_credits", "message": msg},
             )
 
+        # ── 3. Distributed lock ANTES de cobrar (A12) ──
+        # Si cobramos primero y el lock falla, entramos en un ciclo cobro→refund que
+        # solo es seguro si el refund nunca falla. Tomando el lock antes, los envíos
+        # concurrentes a la misma sesión se serializan y solo el ganador cobra: no hay
+        # nada que reembolsar en el caso 409.
+        lock = DistributedLock(
+            f"checkpoint:{user_id}:{request.session_id}", ttl_seconds=60
+        )
+        acquired = await lock.acquire()
+        if not acquired:
+            raise HTTPException(
+                status_code=409,
+                detail="Tu mensaje anterior aún se está procesando. Espera un momento.",
+            )
+
+        # ── 4. Cobro del crédito (ya con el lock en mano) ──
         charge_ctx = None
         credit_manager = None
         try:
@@ -561,6 +607,7 @@ async def chat_stream_endpoint(
             )
             already_charged = True
         except InsufficientCreditsError:
+            await lock.release()
             raise HTTPException(
                 status_code=402,
                 detail={
@@ -569,22 +616,9 @@ async def chat_stream_endpoint(
                 },
             )
         except Exception as e:
+            await lock.release()
             logger.error(f"Error inesperado al cobrar crédito: {e}")
             raise HTTPException(status_code=500, detail="Error interno al procesar créditos")
-
-        # ── 3. Distributed lock (previene concurrencia en el mismo thread) + stream ──
-        lock = DistributedLock(
-            f"checkpoint:{user_id}:{request.session_id}", ttl_seconds=60
-        )
-        acquired = await lock.acquire()
-        if not acquired:
-            # No vamos a procesar este mensaje: reembolsar lo cobrado.
-            if credit_manager and charge_ctx:
-                await credit_manager.arefund(charge_ctx, reason="lock_not_acquired")
-            raise HTTPException(
-                status_code=409,
-                detail="Tu mensaje anterior aún se está procesando. Espera un momento.",
-            )
 
         try:
             return StreamingResponse(
@@ -611,8 +645,7 @@ async def chat_stream_endpoint(
         except Exception as inner_e:
             # Falla ANTES de crear el StreamingResponse: liberar lock y reembolsar.
             await lock.release()
-            if credit_manager and charge_ctx:
-                await credit_manager.arefund(charge_ctx, reason="stream_setup_failed")
+            await _safe_refund(credit_manager, charge_ctx, user_id, "stream_setup_failed")
             raise inner_e
 
     except HTTPException:

@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
 from app.core.logger import api_logger as logger
@@ -11,6 +13,27 @@ from app.infrastructure.database import db
 router = APIRouter()
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
+
+
+def _claim_grant(transactions_col, tx_doc: dict) -> bool:
+    """Reclama un grant ligado a un evento Stripe insertando su registro de
+    transacción (único por stripe_event_id). Devuelve True si se reclamó (hay que
+    aplicar el grant al wallet) o False si ya estaba aplicado (idempotente).
+
+    Orden deliberado: SIEMPRE reclamar antes de mutar el wallet. Así un retry del
+    webhook nunca duplica créditos; en el peor caso (crash entre claim y mutación)
+    queda un registro de transacción sin aplicar, detectable y compensable —
+    preferible a un doble cobro silencioso.
+    """
+    try:
+        transactions_col.insert_one(tx_doc)
+        return True
+    except DuplicateKeyError:
+        logger.info(
+            f"Grant para evento {tx_doc.get('stripe_event_id')} ya aplicado; "
+            "skip idempotente."
+        )
+        return False
 
 
 def _ts_to_dt(ts):
@@ -80,14 +103,39 @@ async def stripe_webhook(request: Request):
     events_col = db_client["stripe_events_processed"]
     users_col = db_client["users"]
     transactions_col = db_client["credit_transactions"]
+    failed_col = db_client["failed_payments"]
 
-    # Idempotencia
-    if events_col.find_one({"_id": event["id"]}):
-        return {"status": "already processed"}
-
+    event_id = event["id"]
     event_type = event["type"]
     obj = event["data"]["object"]
-    logger.info(f"Stripe webhook: {event_type} ({event['id']})")
+
+    # Idempotencia atómica (A2): reclamamos el evento ANTES de procesar.
+    # El _id único hace de lock natural. find_one_and_update con upsert nos dice si
+    # ya existía y en qué estado:
+    #   - None  → primer intento, lo acabamos de marcar "processing".
+    #   - doc con status "done"       → ya procesado, salimos.
+    #   - doc con status "processing" → un intento previo crasheó a mitad; reintentamos
+    #     de forma idempotente (los grants se protegen con el índice único en
+    #     credit_transactions.stripe_event_id, así que no hay doble-grant).
+    existing = events_col.find_one_and_update(
+        {"_id": event_id},
+        {"$setOnInsert": {
+            "type": event_type,
+            "status": "processing",
+            "received_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+        return_document=ReturnDocument.BEFORE,
+    )
+    if existing is not None:
+        if existing.get("status") == "done":
+            return {"status": "already processed"}
+        logger.warning(
+            f"Webhook {event_id} estaba en '{existing.get('status')}' — reintento "
+            "idempotente (un intento previo no terminó)."
+        )
+
+    logger.info(f"Stripe webhook: {event_type} ({event_id})")
 
     try:
         if event_type == "checkout.session.completed":
@@ -98,6 +146,16 @@ async def stripe_webhook(request: Request):
 
             if not user_id or not plan_id:
                 logger.error(f"checkout.session.completed sin user_id/plan_id: {obj.get('id')}")
+                # A2: NO perdemos la compra en silencio. La registramos para que
+                # soporte pueda compensar, y devolvemos 200 (marcando done abajo)
+                # para que Stripe no reintente eternamente.
+                failed_col.insert_one({
+                    "event_id": event_id,
+                    "type": event_type,
+                    "reason": "missing_user_id_or_plan_id",
+                    "stripe_object": obj,
+                    "created_at": datetime.now(timezone.utc),
+                })
             elif mode == "subscription":
                 subscription_id = obj.get("subscription")
                 # Resolver period_end consultando la subscripción (session no lo trae siempre).
@@ -108,15 +166,16 @@ async def stripe_webhook(request: Request):
                         period_end = _ts_to_dt(sub.get("current_period_end"))
                     except Exception as e:
                         logger.warning(f"No pude leer subscription {subscription_id}: {e}")
-                _grant_subscription(users_col, user_id, plan_id, customer_id, subscription_id, period_end)
-                transactions_col.insert_one({
+                # Claim idempotente antes de mutar el wallet (A2).
+                if _claim_grant(transactions_col, {
                     "user_id": user_id,
                     "delta": settings.plan_messages_map.get(plan_id, 0),
                     "balance_source": "plan",
                     "reason": "subscription_grant",
-                    "stripe_event_id": event["id"],
+                    "stripe_event_id": event_id,
                     "created_at": datetime.now(timezone.utc),
-                })
+                }):
+                    _grant_subscription(users_col, user_id, plan_id, customer_id, subscription_id, period_end)
             elif mode == "payment":  # top-up
                 # Defense-in-depth: validar que el top-up corresponde al tier del usuario
                 user_doc = users_col.find_one({"firebase_uid": user_id})
@@ -124,20 +183,21 @@ async def stripe_webhook(request: Request):
                     logger.warning(
                         f"WEBHOOK SECURITY: cross-tier top-up rechazado. "
                         f"user={user_id} tier={get_user_plan(user_doc)} "
-                        f"topup={plan_id} event={event['id']}"
+                        f"topup={plan_id} event={event_id}"
                     )
                     # No otorgamos créditos pero NO rompemos el webhook
                     # (Stripe reintentaría por siempre)
                 else:
-                    _grant_topup(users_col, user_id, plan_id)
-                    transactions_col.insert_one({
+                    # Claim idempotente antes del $inc (A2).
+                    if _claim_grant(transactions_col, {
                         "user_id": user_id,
                         "delta": settings.topup_messages_map.get(plan_id, 0),
                         "balance_source": "topup",
                         "reason": "topup_purchase",
-                        "stripe_event_id": event["id"],
+                        "stripe_event_id": event_id,
                         "created_at": datetime.now(timezone.utc),
-                    })
+                    }):
+                        _grant_topup(users_col, user_id, plan_id)
 
         elif event_type == "invoice.payment_succeeded":
             # Renovación de suscripción → reset del balance del periodo.
@@ -157,24 +217,26 @@ async def stripe_webhook(request: Request):
                             f"No se pudo obtener current_period_end para suscripción "
                             f"{subscription_id}: {sub_err}. El campo quedará como None."
                         )
-                    users_col.update_one(
-                        {"_id": user["_id"]},
-                        {"$set": {
-                            "subscription.status": "active",
-                            "subscription.current_period_end": period_end,
-                            "wallet.pro_messages_balance": plan_messages,
-                            "wallet.pro_messages_granted_this_period": plan_messages,
-                            "wallet.last_period_reset": datetime.now(timezone.utc),
-                        }},
-                    )
-                    transactions_col.insert_one({
+                    # Claim idempotente: si este evento ya reseteó el periodo, no
+                    # repetimos el $set (inofensivo) ni duplicamos la transacción.
+                    if _claim_grant(transactions_col, {
                         "user_id": user.get("firebase_uid"),
                         "delta": plan_messages,
                         "balance_source": "plan",
                         "reason": "period_reset",
-                        "stripe_event_id": event["id"],
+                        "stripe_event_id": event_id,
                         "created_at": datetime.now(timezone.utc),
-                    })
+                    }):
+                        users_col.update_one(
+                            {"_id": user["_id"]},
+                            {"$set": {
+                                "subscription.status": "active",
+                                "subscription.current_period_end": period_end,
+                                "wallet.pro_messages_balance": plan_messages,
+                                "wallet.pro_messages_granted_this_period": plan_messages,
+                                "wallet.last_period_reset": datetime.now(timezone.utc),
+                            }},
+                        )
 
         elif event_type == "invoice.payment_failed":
             subscription_id = obj.get("subscription")
@@ -219,12 +281,13 @@ async def stripe_webhook(request: Request):
 
     except Exception as e:
         logger.error(f"Error procesando webhook {event_type}: {e}")
-        # No metemos en stripe_events_processed → Stripe reintentará.
+        # Dejamos el evento en estado "processing" (no lo marcamos done) → Stripe
+        # reintentará y el reintento re-entra de forma idempotente.
         raise HTTPException(status_code=500, detail="webhook_processing_error")
 
-    events_col.insert_one({
-        "_id": event["id"],
-        "type": event_type,
-        "processed_at": datetime.now(timezone.utc),
-    })
+    # Éxito: marcamos el evento como procesado definitivamente.
+    events_col.update_one(
+        {"_id": event_id},
+        {"$set": {"status": "done", "processed_at": datetime.now(timezone.utc)}},
+    )
     return {"status": "success"}
