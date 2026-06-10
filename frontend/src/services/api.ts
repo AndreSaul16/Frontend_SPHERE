@@ -582,25 +582,3 @@ export const agentOverridesService = {
         req<void>(`/me/agent-overrides/${agentRole}`, { method: "DELETE" }),
 };
 
-// ============================================================
-// DEPLOY STATUS
-// ============================================================
-
-export interface DeployStatusResponse {
-    commit_sha: string;
-    build_timestamp: string;
-    deploy_status: "live" | "deploying";
-    service_name: string;
-    version: string;
-}
-
-export const deployService = {
-    /** Consulta el estado de deploy del backend (público, sin auth). */
-    async getStatus(): Promise<DeployStatusResponse> {
-        const response = await fetch(`${API_URL}/health/deploy`);
-        if (!response.ok) {
-            throw new Error(`Deploy status error: ${response.status}`);
-        }
-        return response.json();
-    },
-};

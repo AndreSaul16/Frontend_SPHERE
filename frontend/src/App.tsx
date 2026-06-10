@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { RequireAuth } from "@/components/RequireAuth";
 import { MainLayout } from "@/components/layout/MainLayout";
@@ -17,7 +17,6 @@ import { ErrorOverlay } from "@/components/common/ErrorOverlay";
 import { useChatStore } from "@/store/useChatStore";
 import { PaywallModal } from "@/components/modals/PaywallModal";
 import { BillingPage } from "@/pages/BillingPage";
-import { StatusPage } from "@/pages/StatusPage";
 
 function AuthenticatedApp() {
   const { fetchSessions, fetchCustomAgents } = useChatStore();
@@ -34,9 +33,6 @@ function AuthenticatedApp() {
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<LoginPage />} />
-
-      {/* Protected: deploy status (served by nginx SPA fallback, auth-gated client-side) */}
-      <Route path="/status" element={<RequireAuth><StatusPage /></RequireAuth>} />
 
       {/* Protected routes */}
       <Route
@@ -121,6 +117,8 @@ function AuthenticatedApp() {
           </RequireAuth>
         }
       />
+      {/* Catch-all: rutas desconocidas (p.ej. /status, ya retirada) → home. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
