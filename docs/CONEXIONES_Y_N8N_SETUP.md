@@ -35,7 +35,18 @@ El código ya está completo (registry de tools, cliente n8n, auto-deploy de wor
 
 1. Despliega n8n (Railway tiene template, o usa tu instancia). Debe ser **alcanzable desde el backend** por `N8N_BASE_URL`.
 2. Activa la API pública de n8n y copia la API key → `N8N_API_KEY`.
-3. Reinicia el backend: en el log verás `📦 Deployando 16 workflows a n8n...` y `✅ Deploy de n8n completado`. El usuario nunca toca n8n.
+3. Reinicia el backend: en el log verás `📦 Deployando 18 workflows a n8n...` y `✅ Deploy de n8n completado`. El usuario nunca toca n8n.
+
+**Variables OBLIGATORIAS en el servicio n8n (Railway):**
+
+| Variable | Por qué |
+|---|---|
+| `N8N_USER_FOLDER=/home/node` | ⚠️ **Sin esto se pierde TODO en cada redeploy.** Con `RAILWAY_RUN_UID=0` n8n corre como root y guarda la DB en `/root/.n8n`, fuera del volumen (montado en `/home/node/.n8n`). Incidente real: 2026-06-12, un redeploy borró workflows + API key. |
+| `NODE_FUNCTION_ALLOW_BUILTIN=crypto` | El nodo `Verify Signature` usa `require('crypto')` para la verificación HMAC. |
+| `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` | n8n ≥2.x bloquea `$env` en nodos Code por defecto; el nodo de verificación lee `$env.N8N_WEBHOOK_SECRET`. |
+| `N8N_WEBHOOK_SECRET` | Mismo valor que en el backend (la firma se verifica dentro de cada workflow). |
+
+> Recomendado: **pinear la imagen** a una versión concreta (ej. `n8nio/n8n:2.25.7`) en vez de `latest` — un redeploy con `latest` puede saltar de major version sin avisar.
 
 ---
 
