@@ -57,9 +57,15 @@ async def is_authorized(
     col = get_contacts_collection()
     normalized = contact_value.lower().strip()
 
+    # Buscar tanto por value (teléfono/email) como por display_name (nombre).
+    # Los agentes LLM suelen pasar nombres ("Ruben Lima"), no números — si solo
+    # buscamos por value, el contacto aparece como no autorizado aunque exista.
     query = {
         "user_id": user_id,
-        "value": normalized,
+        "$or": [
+            {"value": normalized},
+            {"display_name": normalized},
+        ],
         "authorized_for": tool_name,
     }
     if contact_type:
