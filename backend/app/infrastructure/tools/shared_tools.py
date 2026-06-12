@@ -236,6 +236,26 @@ class WhatsAppReadMessagesInput(BaseModel):
     since: Optional[str] = Field(None, description="Desde qué fecha ISO 8601")
 
 
+def _validate_whatsapp_credentials(creds: dict, tool_name: str) -> Optional[str]:
+    """Devuelve error si las credenciales de WhatsApp no están configuradas.
+    El usuario debe conectar WhatsApp en Settings → Connections."""
+    w = creds.get("whatsapp", {}) if creds else {}
+    if not w or not w.get("phone_number_id") or not w.get("access_token"):
+        return json.dumps(
+            {
+                "error": "whatsapp_not_configured",
+                "tool": tool_name,
+                "hint": (
+                    "WhatsApp no está configurado. Conéctalo en "
+                    "Settings → Connections → WhatsApp. Necesitás un "
+                    "WhatsApp Business Account (phone_number_id + access_token)."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    return None
+
+
 async def _whatsapp_send_message(to: str, message: str) -> str:
     # Validar destinatario contra whitelist del usuario (tipo phone)
     user_id = get_current_user_id()
@@ -251,6 +271,11 @@ async def _whatsapp_send_message(to: str, message: str) -> str:
 
     payload = {"to": to, "message": message}
     payload, creds = await inject_credentials_into_payload(payload, ["whatsapp"])
+
+    err = _validate_whatsapp_credentials(creds, "whatsapp_send_message")
+    if err:
+        return err
+
     result = await n8n_client.call_webhook(
         "shared/whatsapp-send",
         payload,
@@ -278,6 +303,11 @@ async def _whatsapp_send_notification(
 
     payload = {"group": group, "message": message, "priority": priority}
     payload, creds = await inject_credentials_into_payload(payload, ["whatsapp"])
+
+    err = _validate_whatsapp_credentials(creds, "whatsapp_send_notification")
+    if err:
+        return err
+
     result = await n8n_client.call_webhook(
         "shared/whatsapp-notify",
         payload,
@@ -297,6 +327,11 @@ async def _whatsapp_read_messages(
     if since:
         payload["since"] = since
     payload, creds = await inject_credentials_into_payload(payload, ["whatsapp"])
+
+    err = _validate_whatsapp_credentials(creds, "whatsapp_read_messages")
+    if err:
+        return err
+
     result = await n8n_client.call_webhook(
         "shared/whatsapp-read", payload, user_credentials=creds
     )
