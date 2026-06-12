@@ -167,14 +167,18 @@ async def _get_social_analytics(
     period: Literal["7d", "30d", "90d"] = "30d",
     metrics: Optional[list[str]] = None,
 ) -> str:
+    payload = {
+        "platform": platform,
+        "period": period,
+        "metrics": metrics or ["impressions", "engagement_rate", "clicks"],
+    }
+    services = ["linkedin", "instagram"] if platform == "all" else [platform]
+    payload, creds = await inject_credentials_into_payload(payload, services)
     result = await n8n_client.call_webhook(
         "cmo/social-analytics",
-        {
-            "platform": platform,
-            "period": period,
-            "metrics": metrics or ["impressions", "engagement_rate", "clicks"],
-        },
+        payload,
         timeout=15.0,
+        user_credentials=creds,
     )
     return json.dumps(result, ensure_ascii=False)
 

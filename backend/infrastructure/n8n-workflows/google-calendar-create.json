@@ -16,7 +16,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const payload = $input.first().json;\nconst creds = payload.user_credentials?.google_calendar || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    calendar_id: creds.calendar_id || 'primary',\n    title: payload.title,\n    start_time: payload.start_time,\n    end_time: payload.end_time,\n    description: payload.description || '',\n    attendees: payload.attendees || []\n  }\n}];"
+        "jsCode": "const payload = $input.first().json.body || $input.first().json;\nconst creds = payload.user_credentials?.google_calendar || {};\n\nreturn [{\n  json: {\n    api_key: creds.api_key || '',\n    calendar_id: creds.calendar_id || 'primary',\n    title: payload.title,\n    start_time: payload.start_time,\n    end_time: payload.end_time,\n    description: payload.description || '',\n    attendees: payload.attendees || []\n  }\n}];"
       },
       "id": "code-1",
       "name": "Extract Credentials",
