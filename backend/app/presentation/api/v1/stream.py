@@ -19,6 +19,11 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from app.application.orchestrator import app as orchestrator_app
 from app.application.orchestrator import board_app as board_orchestrator_app
+from app.application.board_v2 import (
+    board_v2_app,
+    BOARD_NODE_ROLES_V2,
+    BOARD_NODE_PHASES_V2,
+)
 from app.core.auth import get_current_user
 from app.core.tenant import require_owner
 from app.core.distributed_lock import DistributedLock
@@ -88,6 +93,8 @@ async def generate_chat_events(
     charge_ctx = None,
     credit_manager = None,
     lock: Optional["DistributedLock"] = None,
+    board_v2: bool = False,
+    board_devil: bool = False,
 ):
     """Generador asíncrono con aislamiento multi-tenant.
 
@@ -123,12 +130,14 @@ async def generate_chat_events(
             "messages": [new_message],
             "target_role": target_role,
             "user_id": user_id,
+            "session_id": session_id,
             "already_charged": already_charged,
             "board_mode": board_mode,
             "board_iteration": 0,
             "board_max_iterations": board_iterations or 1,
             "board_iterations_pref": board_iterations,
             "board_regenerate": regenerate,
+            "board_devil": board_devil,
         }
         # Solo inicializar board_agents_done en un board meeting NUEVO.
         # En regeneración, el checkpoint ya tiene la lista correcta y la usamos
@@ -136,22 +145,36 @@ async def generate_chat_events(
         if not regenerate:
             initial_state["board_agents_done"] = []
 
-        # Choose the right orchestrator
-        active_orchestrator = board_orchestrator_app if board_mode else orchestrator_app
+        # Choose the right orchestrator: V2 (debate paralelo) > legacy board > normal.
+        if board_mode and board_v2:
+            active_orchestrator = board_v2_app
+        elif board_mode:
+            active_orchestrator = board_orchestrator_app
+        else:
+            active_orchestrator = orchestrator_app
 
         buffer = ""
         artifact_buffer = ""
         is_inside_artifact = False
         current_board_agent = None  # Track which agent is speaking in board mode
-        # Nodos del board workflow → rol que habla. Incluye "conclusion" (CEO),
+        announced_board_nodes: set = set()  # Dedup de board_agent por NODO (no por rol)
+        partial_refund_done = False  # Refund parcial del triage emitido una sola vez
+        # Nodos del board legacy → rol que habla. Incluye "conclusion" (CEO),
         # que el filtro antiguo ('board' in node_name) NO detectaba (bug).
-        BOARD_NODE_ROLES = {
+        BOARD_NODE_ROLES_LEGACY = {
             "ceo_board": "CEO",
             "cto_board": "CTO",
             "cfo_board": "CFO",
             "cmo_board": "CMO",
             "conclusion": "CEO",
         }
+        # Mapa unificado nodo→rol según el grafo activo.
+        BOARD_NODE_ROLES = BOARD_NODE_ROLES_V2 if board_v2 else BOARD_NODE_ROLES_LEGACY
+        # Nodos cuyo cierre indica conclusión/síntesis (is_conclusion=True).
+        CONCLUSION_NODES = {"synthesis"} if board_v2 else {"conclusion"}
+
+        def _node_role(node_name: str) -> Optional[str]:
+            return BOARD_NODE_ROLES.get(node_name)
         # Token cap tracking: accumulate tokens from on_chat_model_end events
         # to call aadjust_after_completion after the stream completes.
         total_tokens_in = 0
@@ -174,26 +197,30 @@ async def generate_chat_events(
             kind = event["event"]
 
             # --- A0. INICIO DE NODO BOARD: marcar quién EMPIEZA a hablar ---
-            # Usamos on_chain_start (no on_chain_end) para que el marcador del
-            # agente llegue ANTES de sus tokens; con on_chain_end llegaba tarde
-            # (tras emitir ya su respuesta). Dedup por rol evita doble emisión.
-            # EXCEPCIÓN: conclusión SIEMPRE se emite (incluso si el rol es el mismo
-            # que current_board_agent), porque en regeneración el CEO se saltea y
-            # current_board_agent queda en "CEO", silenciando erróneamente la
-            # conclusión (que también mapea a CEO).
+            # Usamos on_chain_start para que el marcador del agente llegue ANTES de
+            # sus tokens. FIX bug duplicado: dedup por NOMBRE DE NODO (no por rol).
+            # Antes la "excepción conclusión" hacía que el cierre de synthesis/conclusion
+            # se anunciara dos veces (on_chain_start + fallback on_chain_end).
             if kind == "on_chain_start":
                 try:
                     node_name = event.get("name", "")
-                    role = BOARD_NODE_ROLES.get(node_name)
-                    is_conclusion = node_name == "conclusion"
-                    if role and (role != current_board_agent or is_conclusion):
+                    role = _node_role(node_name)
+                    if role and node_name not in announced_board_nodes:
+                        announced_board_nodes.add(node_name)
+                        is_conclusion = node_name in CONCLUSION_NODES
+                        phase = BOARD_NODE_PHASES_V2.get(node_name) if board_v2 else None
                         current_board_agent = role
-                        logger.debug(f"Board meeting: {role} empieza a hablar ({node_name})")
-                        yield f"data: {json.dumps({'type': 'board_agent', 'role': role, 'is_conclusion': is_conclusion})}\n\n"
+                        logger.debug(f"Board: {role} empieza a hablar ({node_name})")
+                        payload = {"type": "board_agent", "role": role, "is_conclusion": is_conclusion}
+                        if phase:
+                            payload["phase"] = phase
+                        yield f"data: {json.dumps(payload)}\n\n"
+                        if phase:
+                            yield f"data: {json.dumps({'type': 'board_phase', 'phase': phase})}\n\n"
                 except Exception as exc:
                     logger.debug(f"on_chain_start board marker falló: {exc}")
 
-            # --- A. DETECCIÓN DE ROL (Router / fallback board) ---
+            # --- A. DETECCIÓN DE ROL (Router / fallback board) + EVENTOS V2 ---
             if kind == "on_chain_end":
                 node_name = event.get("name", "")
 
@@ -205,15 +232,57 @@ async def generate_chat_events(
                         logger.debug(f"Router detectó agente: {role}")
                         yield f"data: {json.dumps({'type': 'meta', 'role': role})}\n\n"
 
-                # Fallback: si por algún motivo no llegó on_chain_start del nodo
-                # board, lo marcamos al cerrar. El dedup por rol garantiza que no
-                # se emita dos veces cuando on_chain_start sí llegó.
-                # Misma excepción que arriba: conclusión siempre se emite.
-                board_role = BOARD_NODE_ROLES.get(node_name)
-                is_board_conclusion = node_name == "conclusion"
-                if board_role and (board_role != current_board_agent or is_board_conclusion):
+                # Fallback: si no llegó on_chain_start del nodo board, marcarlo al
+                # cerrar. Dedup por NOMBRE DE NODO garantiza una sola emisión.
+                board_role = _node_role(node_name)
+                if board_role and node_name not in announced_board_nodes:
+                    announced_board_nodes.add(node_name)
+                    is_board_conclusion = node_name in CONCLUSION_NODES
+                    phase = BOARD_NODE_PHASES_V2.get(node_name) if board_v2 else None
                     current_board_agent = board_role
-                    yield f"data: {json.dumps({'type': 'board_agent', 'role': board_role, 'is_conclusion': is_board_conclusion})}\n\n"
+                    payload = {"type": "board_agent", "role": board_role, "is_conclusion": is_board_conclusion}
+                    if phase:
+                        payload["phase"] = phase
+                    yield f"data: {json.dumps(payload)}\n\n"
+
+                # --- Eventos exclusivos de Board V2 ---
+                if board_v2:
+                    output = event.get("data", {}).get("output") or {}
+                    # board_plan tras el triage (+ refund parcial si baja a 2 directores)
+                    if node_name == "triage" and not partial_refund_done:
+                        partial_refund_done = True
+                        participants = output.get("board_participants") or ["CTO", "CFO", "CMO"]
+                        from app.application.credit_manager import BOARD_MEETING_COST, BOARD_REDUCED_COST
+                        cost = BOARD_REDUCED_COST if len(participants) <= 2 else BOARD_MEETING_COST
+                        if cost < BOARD_MEETING_COST and already_charged and charge_ctx and credit_manager is not None and not regenerate:
+                            try:
+                                await credit_manager.apartial_refund(charge_ctx, BOARD_MEETING_COST - cost)
+                            except Exception as exc:
+                                logger.error(f"Partial refund board falló: {exc}")
+                        yield f"data: {json.dumps({'type': 'board_plan', 'participants': participants, 'cost': cost})}\n\n"
+                    # board_vote tras cada director (analysis/rebuttal)
+                    if isinstance(output, dict) and output.get("board_votes"):
+                        for vrole, vdata in output["board_votes"].items():
+                            if vrole == "__RESET__" or not isinstance(vdata, dict):
+                                continue
+                            yield f"data: {json.dumps({'type': 'board_vote', 'role': vrole, 'vote': vdata.get('decision'), 'confidence': vdata.get('confidence')})}\n\n"
+                    # board_consensus tras el gate
+                    if node_name in ("consensus_gate", "rebuttal_join"):
+                        from app.application.board_v2 import _tally
+                        # El tally se calcula leyendo el estado acumulado vía aget_state.
+                        try:
+                            snap = await active_orchestrator.aget_state(config)
+                            tally = _tally((snap.values or {}).get("board_votes", {}))
+                            early = tally["unanimous"] and tally["avg_confidence"] >= 70
+                            yield f"data: {json.dumps({'type': 'board_consensus', 'unanimous': tally['unanimous'], 'tally': tally['counts'], 'early_exit': early and node_name == 'consensus_gate'})}\n\n"
+                        except Exception as exc:
+                            logger.debug(f"board_consensus snapshot falló: {exc}")
+                    # board_intervention: si el gate inyectó una intervención
+                    if node_name in ("consensus_gate", "rebuttal_join") and isinstance(output, dict):
+                        for m in output.get("messages", []) or []:
+                            content = getattr(m, "content", "")
+                            if isinstance(content, str) and content.startswith("[INTERVENCIÓN DEL FUNDADOR"):
+                                yield f"data: {json.dumps({'type': 'board_intervention', 'text': content})}\n\n"
 
             # --- A2. CHAT MODEL END — acumular tokens para ajuste post-stream ---
             if kind == "on_chat_model_end":
@@ -244,6 +313,15 @@ async def generate_chat_events(
                 chunk = event.get("data", {}).get("chunk")
                 if chunk is None:
                     continue
+
+                # En board mode (esp. V2 con nodos en paralelo) el rol que habla se
+                # deriva del nodo LangGraph que emite este token concreto. Así los
+                # tokens de cto/cfo/cmo que llegan intercalados se etiquetan bien.
+                if board_mode:
+                    node_now = (event.get("metadata") or {}).get("langgraph_node")
+                    role_now = _node_role(node_now) if node_now else None
+                    if role_now:
+                        current_board_agent = role_now
 
                 # --- C0. RAZONAMIENTO (chain-of-thought de modelos reasoning) ---
                 # DeepSeek (deepseek-v4-pro) emite el razonamiento en
@@ -285,7 +363,7 @@ async def generate_chat_events(
                             artifact_buffer = ""
 
                             if chat_residue:
-                                yield f"data: {json.dumps({'type': 'token', 'content': chat_residue})}\n\n"
+                                yield f"data: {json.dumps({'type': 'token', 'content': chat_residue, 'role': current_board_agent})}\n\n"
 
                             buffer = ""
                         else:
@@ -354,7 +432,7 @@ async def generate_chat_events(
 
                                     pre_tag = buffer[:tag_start]
                                     if pre_tag.strip():
-                                        yield f"data: {json.dumps({'type': 'token', 'content': pre_tag})}\n\n"
+                                        yield f"data: {json.dumps({'type': 'token', 'content': pre_tag, 'role': current_board_agent})}\n\n"
 
                                     yield f"data: {json.dumps({'type': 'artifact_open', 'title': title, 'artifact_type': artifact_type, 'language': language})}\n\n"
 
@@ -385,17 +463,19 @@ async def generate_chat_events(
                             ]
 
                             if not any(buffer.endswith(p) for p in partial_tags):
-                                yield f"data: {json.dumps({'type': 'token', 'content': buffer})}\n\n"
+                                yield f"data: {json.dumps({'type': 'token', 'content': buffer, 'role': current_board_agent})}\n\n"
                                 buffer = ""
 
         if buffer.strip():
-            yield f"data: {json.dumps({'type': 'token', 'content': buffer})}\n\n"
+            yield f"data: {json.dumps({'type': 'token', 'content': buffer, 'role': current_board_agent})}\n\n"
 
         # Token cap adjustment: si el stream cobró (already_charged=True) y
         # la inferencia superó el cap de 4k tokens, cobrar mensaje extra.
         # Esto es SEPARADO del charge inicial — siempre debe ejecutarse.
         if already_charged and charge_ctx and credit_manager is not None and (total_tokens_in + total_tokens_out) > 0:
-            cost_actual = (total_tokens_in * 0.27 + total_tokens_out * 1.10) / 1_000_000
+            from app.core.llm_models import pricing_for, DEEPSEEK_REASONING
+            _price = pricing_for(DEEPSEEK_REASONING)
+            cost_actual = (total_tokens_in * _price["input"] + total_tokens_out * _price["output"]) / 1_000_000
             try:
                 await credit_manager.aadjust_after_completion(
                     charge_ctx, total_tokens_in, total_tokens_out, cost_actual
@@ -493,6 +573,7 @@ async def chat_stream_endpoint(
         final_target_role = request.target_role
         board_mode = False
         board_iterations = None
+        board_devil = False
 
         if not final_target_role and session_doc:
             # Detección ROBUSTA de sesión de grupo: no dependemos solo de `type`,
@@ -518,10 +599,11 @@ async def chat_stream_endpoint(
                 users_col = get_users_collection()
                 user_doc = await users_col.find_one(
                     {"firebase_uid": user_id},
-                    {"board_meeting_enabled": 1, "board_iterations": 1},
+                    {"board_meeting_enabled": 1, "board_iterations": 1, "board_devils_advocate": 1},
                 )
                 if user_doc and user_doc.get("board_meeting_enabled", False):
                     board_mode = True
+                    board_devil = bool(user_doc.get("board_devils_advocate", False))
                     # Honrar la preferencia explícita del usuario (1 o 2); si no está
                     # seteada, el classifier decide automáticamente.
                     pref = user_doc.get("board_iterations")
@@ -529,7 +611,7 @@ async def chat_stream_endpoint(
                         board_iterations = min(pref, 2)
                     logger.info(
                         f"✅ Board Meeting ACTIVADO para user {user_id} "
-                        f"(iteraciones={board_iterations or 'auto'})"
+                        f"(iteraciones={board_iterations or 'auto'}, devil={board_devil})"
                     )
                 else:
                     enabled_val = user_doc.get("board_meeting_enabled") if user_doc else "sin-doc-usuario"
@@ -634,6 +716,8 @@ async def chat_stream_endpoint(
                     charge_ctx=charge_ctx,
                     credit_manager=credit_manager,
                     lock=lock,
+                    board_v2=(board_mode and app_settings.BOARD_V2_ENABLED),
+                    board_devil=board_devil,
                 ),
                 media_type="text/event-stream",
                 headers={
@@ -653,3 +737,65 @@ async def chat_stream_endpoint(
     except Exception as e:
         logger.error(f"🔥 Error iniciando stream: {e}")
         raise HTTPException(status_code=500, detail="Error interno del servidor")
+
+
+class InterveneRequest(BaseModel):
+    session_id: str
+    text: str = Field(..., min_length=1, max_length=1000)
+
+
+_interventions_index_ready = False
+
+
+@router.post("/intervene")
+async def board_intervene_endpoint(
+    request: InterveneRequest,
+    user: dict = Depends(get_current_user),
+):
+    """Encola una intervención del usuario en un debate de board EN CURSO. El grafo V2
+    la inyecta como mensaje del fundador antes de la siguiente fase (réplicas o síntesis).
+    Sin coste de créditos."""
+    global _interventions_index_ready
+    user_id = user["firebase_uid"]
+
+    from app.infrastructure.database import get_sessions_collection, db
+    from datetime import datetime, timezone
+
+    session_doc = await get_sessions_collection().find_one({"session_id": request.session_id})
+    require_owner(session_doc, user_id, "Sesión")
+
+    # Debe haber un debate en curso (lock activo). Si Redis no está disponible,
+    # aceptamos best-effort (la intervención se consumirá solo si hay debate).
+    try:
+        from app.infrastructure.redis_client import _redis_client
+        if _redis_client is not None:
+            lock_key = f"lock:checkpoint:{user_id}:{request.session_id}"
+            exists = await _redis_client.exists(lock_key) if hasattr(_redis_client, "exists") else None
+            if exists == 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail="No hay un debate en curso en esta sesión para intervenir.",
+                )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.debug(f"No se pudo verificar lock para intervención: {exc}")
+
+    col = db.get_async_db()["board_interventions"]
+    if not _interventions_index_ready:
+        try:
+            await col.create_index("created_at", expireAfterSeconds=600)
+            await col.create_index([("user_id", 1), ("session_id", 1), ("consumed", 1)])
+            _interventions_index_ready = True
+        except Exception as exc:
+            logger.debug(f"No se pudo crear índice board_interventions: {exc}")
+
+    await col.insert_one({
+        "user_id": user_id,
+        "session_id": request.session_id,
+        "text": request.text.strip(),
+        "consumed": False,
+        "created_at": datetime.now(timezone.utc),
+    })
+    logger.info(f"💬 Intervención encolada para {user_id}:{request.session_id}")
+    return {"ok": True, "message": "Tu intervención entrará antes de la siguiente fase del debate."}

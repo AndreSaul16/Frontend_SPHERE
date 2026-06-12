@@ -608,11 +608,13 @@ async def test_service_credential(
 class BoardSettingsResponse(BaseModel):
     board_meeting_enabled: bool = False
     board_iterations: int = 1
+    board_devils_advocate: bool = False
 
 
 class BoardSettingsUpdateRequest(BaseModel):
     board_meeting_enabled: Optional[bool] = None
     board_iterations: Optional[int] = None
+    board_devils_advocate: Optional[bool] = None
 
 
 @router.get("/me/board-settings", response_model=BoardSettingsResponse)
@@ -621,7 +623,7 @@ async def get_board_settings(user: dict = Depends(get_current_user)):
     users_col = get_users_collection()
     user_doc = await users_col.find_one(
         {"firebase_uid": user["firebase_uid"]},
-        {"board_meeting_enabled": 1, "board_iterations": 1},
+        {"board_meeting_enabled": 1, "board_iterations": 1, "board_devils_advocate": 1},
     )
 
     if not user_doc:
@@ -630,6 +632,7 @@ async def get_board_settings(user: dict = Depends(get_current_user)):
     return BoardSettingsResponse(
         board_meeting_enabled=user_doc.get("board_meeting_enabled", False),
         board_iterations=user_doc.get("board_iterations", 1),
+        board_devils_advocate=user_doc.get("board_devils_advocate", False),
     )
 
 
@@ -650,6 +653,8 @@ async def update_board_settings(
                 status_code=400, detail="board_iterations solo acepta 1 (único modo disponible)"
             )
         update_data["board_iterations"] = body.board_iterations
+    if body.board_devils_advocate is not None:
+        update_data["board_devils_advocate"] = body.board_devils_advocate
 
     if not update_data:
         return await get_board_settings(user)
@@ -666,4 +671,5 @@ async def update_board_settings(
     return BoardSettingsResponse(
         board_meeting_enabled=result.get("board_meeting_enabled", False),
         board_iterations=result.get("board_iterations", 1),
+        board_devils_advocate=result.get("board_devils_advocate", False),
     )

@@ -52,6 +52,18 @@ llm_expert = ChatOpenAI(
 )
 
 
+def _merge_board_votes(left: Optional[dict], right: Optional[dict]) -> dict:
+    """Reducer para board_votes: permite acumular votos desde nodos que corren en
+    paralelo (cto/cfo/cmo) sin que se pisen entre sí. El sentinel {"__RESET__": True}
+    vacía el acumulado (necesario porque el checkpoint persiste entre debates de la
+    misma sesión y un reducer puramente aditivo no podría limpiarse)."""
+    left = left or {}
+    right = right or {}
+    if right.get("__RESET__"):
+        return {}
+    return {**left, **right}
+
+
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     next_agent: str  # Literal["CEO", "CTO", "CFO", "CMO", "FINAL"] o un Custom ID
@@ -63,14 +75,21 @@ class AgentState(TypedDict):
     tool_calls_remaining: int  # Anti-loop: máximo iteraciones de tool-calling
     user_id: str  # Multi-tenant: se inyecta desde el JWT
     already_charged: bool  # True si el crédito ya fue cobrado en stream.py
-    # Board Meeting fields
+    # Board Meeting fields (legacy + V2)
     board_mode: bool  # True si estamos en modo board meeting
     board_iteration: int  # Iteración actual (0, 1, 2...)
     board_max_iterations: int  # Máximo de iteraciones (1 o 2)
     board_iterations_pref: Optional[int]  # Preferencia explícita del usuario (1/2); None = auto
     board_agents_done: list[
         str
-    ]  # Lista de agentes que ya respondieron en esta iteración
+    ]  # Lista de agentes que ya respondieron (legacy: sin reducer, escritura secuencial)
+    board_regenerate: bool  # True cuando regeneramos (saltar agentes ya respondidos)
+    session_id: Optional[str]  # Para leer intervenciones del usuario (board V2)
+    # --- Board V2 (debate paralelo) ---
+    board_participants: Optional[list[str]]  # Directores elegidos por el triage
+    board_votes: Annotated[dict, _merge_board_votes]  # {rol: {decision, confidence}}
+    board_phase: Optional[str]  # opening|analysis|rebuttal|devil|synthesis
+    board_devil: bool  # Devil's Advocate activado por el usuario
 
 
 # --- PROMPTS ---

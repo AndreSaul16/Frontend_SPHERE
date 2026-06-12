@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"
 
+    # Board Meeting V2 (debate paralelo + triage + votos + devil + acta).
+    # Si se desactiva, el board usa el grafo secuencial legacy (rollback por env var).
+    BOARD_V2_ENABLED: bool = True
+
     # OpenAI
     OPENAI_API_KEY: str = ""
 

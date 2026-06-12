@@ -194,7 +194,7 @@ export const BillingPage: React.FC = () => {
                         </div>
                         <div className="flex flex-col gap-3">
                             <div className="flex justify-between items-baseline">
-                                <span className="text-text-secondary text-sm">Plan Free (50/mes)</span>
+                                <span className="text-text-secondary text-sm">Plan Free (30/mes)</span>
                                 <span className="text-2xl font-bold text-text-primary">{pro_messages_balance}</span>
                             </div>
                             <div className="flex justify-between items-baseline">

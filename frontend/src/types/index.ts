@@ -1,4 +1,12 @@
-export type Role = 'user' | 'system' | 'CTO' | 'CMO' | 'CFO' | 'CEO' | 'specialist';
+export type Role = 'user' | 'system' | 'CTO' | 'CMO' | 'CFO' | 'CEO' | 'specialist' | 'DEVIL';
+
+// Board V2: voto estructurado de un director.
+export interface BoardVote {
+    decision: 'SI' | 'NO' | 'CONDICIONAL';
+    confidence: number; // 0-100
+}
+
+export type BoardPhase = 'opening' | 'analysis' | 'rebuttal' | 'devil' | 'synthesis';
 
 export type SessionType = 'group' | 'direct';
 
@@ -56,6 +64,8 @@ export interface Message {
     agentId?: string; // Si es null, es del sistema o usuario
     thinking?: string; // Chain-of-thought (reasoning_content) emitido en streaming
     isConclusion?: boolean; // Board meeting: síntesis ejecutiva final del CEO
+    vote?: BoardVote; // Board V2: voto del director (se muestra como chip)
+    phase?: BoardPhase; // Board V2: fase del debate en la que se emitió
 }
 
 export interface ChatSession {

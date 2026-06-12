@@ -35,14 +35,25 @@ export async function authHeaders(): Promise<Record<string, string>> {
 }
 
 export interface StreamCallbacks {
-    onToken: (content: string) => void;
+    // role llega en board V2 (debate paralelo) para enrutar el token a la burbuja correcta.
+    onToken: (content: string, role?: string | null) => void;
     onRole: (role: string) => void;
     // BOARD MEETING: inicio del debate multi-agente (sirve de confirmación visual)
     onBoardStart?: (data: { agents: string[]; iterations: number | string }) => void;
-    // BOARD MEETING: cada agente que empieza a hablar (CEO → CTO → CFO → CMO → conclusión)
-    onBoardAgent?: (data: { role: string; is_conclusion: boolean }) => void;
+    // BOARD MEETING: cada agente que empieza a hablar (con fase en V2)
+    onBoardAgent?: (data: { role: string; is_conclusion: boolean; phase?: string }) => void;
+    // BOARD V2: el triage decidió los participantes y el coste real (3 o 5 créditos)
+    onBoardPlan?: (data: { participants: string[]; cost: number }) => void;
+    // BOARD V2: cambio de fase del debate (opening|analysis|rebuttal|devil|synthesis)
+    onBoardPhase?: (data: { phase: string }) => void;
+    // BOARD V2: voto estructurado de un director
+    onBoardVote?: (data: { role: string; vote: string; confidence: number }) => void;
+    // BOARD V2: resultado de consenso tras una ronda
+    onBoardConsensus?: (data: { unanimous: boolean; tally: Record<string, number>; early_exit: boolean }) => void;
+    // BOARD V2: el grafo inyectó una intervención del usuario
+    onBoardIntervention?: (data: { text: string }) => void;
     // THINKING: línea de razonamiento (reasoning_content) del modelo, en streaming
-    onThinking?: (content: string) => void;
+    onThinking?: (content: string, role?: string | null) => void;
     // ARTIFACTS 2.0 STREAMING: 3-event protocol for live artifact rendering
     onArtifactOpen?: (data: { title: string; artifact_type: string; language: string }) => void;
     onArtifactChunk?: (content: string) => void;
@@ -142,7 +153,7 @@ export const chatService = {
                         }
 
                         if (data.type === 'token' && typeof data.content === 'string') {
-                            callbacks.onToken(data.content);
+                            callbacks.onToken(data.content, data.role ?? null);
                         } else if (data.type === 'meta' && data.role) {
                             callbacks.onRole(data.role);
                         } else if (data.type === 'board_start') {
@@ -151,9 +162,26 @@ export const chatService = {
                                 iterations: data.iterations ?? 'auto',
                             });
                         } else if (data.type === 'board_agent' && typeof data.role === 'string') {
-                            callbacks.onBoardAgent?.({ role: data.role, is_conclusion: !!data.is_conclusion });
+                            callbacks.onBoardAgent?.({ role: data.role, is_conclusion: !!data.is_conclusion, phase: data.phase });
+                        } else if (data.type === 'board_plan') {
+                            callbacks.onBoardPlan?.({
+                                participants: Array.isArray(data.participants) ? data.participants : [],
+                                cost: typeof data.cost === 'number' ? data.cost : 5,
+                            });
+                        } else if (data.type === 'board_phase' && typeof data.phase === 'string') {
+                            callbacks.onBoardPhase?.({ phase: data.phase });
+                        } else if (data.type === 'board_vote' && typeof data.role === 'string') {
+                            callbacks.onBoardVote?.({ role: data.role, vote: data.vote, confidence: data.confidence });
+                        } else if (data.type === 'board_consensus') {
+                            callbacks.onBoardConsensus?.({
+                                unanimous: !!data.unanimous,
+                                tally: data.tally || {},
+                                early_exit: !!data.early_exit,
+                            });
+                        } else if (data.type === 'board_intervention' && typeof data.text === 'string') {
+                            callbacks.onBoardIntervention?.({ text: data.text });
                         } else if (data.type === 'thinking' && typeof data.content === 'string') {
-                            callbacks.onThinking?.(data.content);
+                            callbacks.onThinking?.(data.content, data.role ?? null);
                         } else if (data.type === 'artifact_open') {
                             callbacks.onArtifactOpen?.({
                                 title: data.title || 'untitled',
@@ -415,6 +443,42 @@ export const chatService = {
             body: JSON.stringify({ message_id: messageId, rating, feedback })
         });
         if (!response.ok) throw new Error(`Error rating message: ${response.status}`);
+    },
+
+    /** Board settings: lee la config de debate del usuario. */
+    async getBoardSettings(): Promise<{ board_meeting_enabled: boolean; board_iterations: number; board_devils_advocate: boolean }> {
+        const response = await fetch(`${API_URL}/me/board-settings`, { headers: await authHeaders() });
+        if (!response.ok) throw new Error(`Error board-settings: ${response.status}`);
+        return response.json();
+    },
+
+    /** Board settings: actualiza la config de debate (activar, devil's advocate). */
+    async updateBoardSettings(patch: { board_meeting_enabled?: boolean; board_devils_advocate?: boolean }): Promise<any> {
+        const response = await fetch(`${API_URL}/me/board-settings`, {
+            method: 'PATCH',
+            headers: await authHeaders(),
+            body: JSON.stringify(patch),
+        });
+        if (!response.ok) throw new Error(`Error board-settings: ${response.status}`);
+        return response.json();
+    },
+
+    /**
+     * BOARD V2: encola una intervención del usuario en un debate en curso.
+     * El grafo la inyecta antes de la siguiente fase. Sin coste de créditos.
+     */
+    async intervene(sessionId: string, text: string): Promise<{ ok: boolean; message: string }> {
+        const response = await fetch(`${API_URL}/stream/intervene`, {
+            method: 'POST',
+            headers: await authHeaders(),
+            body: JSON.stringify({ session_id: sessionId, text })
+        });
+        if (!response.ok) {
+            const { handleResponseError } = await import('./errorHandler');
+            const err = await handleResponseError(response);
+            throw new Error(err.message);
+        }
+        return response.json();
     }
 };
 

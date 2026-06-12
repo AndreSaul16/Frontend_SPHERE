@@ -1,4 +1,5 @@
-import { FileCode, Download, ExternalLink, FileText, Table, GitBranch } from 'lucide-react';
+import { FileCode, Download, ExternalLink, FileText, Table, GitBranch, Gavel } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useChatStore } from '@/store/useChatStore';
 import { getDownloadExtension, type ArtifactType } from '@/types/artifact';
 
@@ -67,13 +68,29 @@ export function ArtifactCard({ content, language, artifactType, title: propsTitl
     const displayContent = existingArtifact?.content || content;
     const size = formatSize(displayContent);
 
+    // Board V2: el "Acta de la Junta" es el artefacto estrella del debate → reveal
+    // con borde conic-gradient animado para destacarla como decisión.
+    const isActa = /acta/i.test(title);
+
     return (
-        <div className="my-4 group">
-            <div className="bg-surface/50 border border-surface-highlight rounded-xl overflow-hidden hover:border-electric-cyan/30 transition-all shadow-lg backdrop-blur-sm">
+        <div className="my-4 group relative">
+            {isActa && (
+                <motion.div
+                    aria-hidden
+                    className="absolute -inset-[1.5px] rounded-xl pointer-events-none"
+                    style={{
+                        background: 'conic-gradient(from 0deg, #00F5D4, #9D85FF, #FF2E97, #00F5D4)',
+                        filter: 'blur(0.5px)',
+                    }}
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 6, ease: 'linear' }}
+                />
+            )}
+            <div className="relative bg-surface/50 border border-surface-highlight rounded-xl overflow-hidden hover:border-electric-cyan/30 transition-all shadow-lg backdrop-blur-sm">
                 <div className="px-4 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
                         <div className="p-2 bg-midnight rounded-lg text-electric-cyan group-hover:scale-110 transition-transform">
-                            {getIcon(artifactType, language)}
+                            {isActa ? <Gavel className="h-4 w-4" /> : getIcon(artifactType, language)}
                         </div>
                         <div className="min-w-0">
                             <p className="text-xs font-mono text-text-primary truncate">
@@ -97,7 +114,7 @@ export function ArtifactCard({ content, language, artifactType, title: propsTitl
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-surface-highlight hover:bg-electric-cyan/10 text-text-secondary hover:text-electric-cyan rounded-lg text-[11px] font-medium transition-colors border border-transparent hover:border-electric-cyan/20"
                         >
                             <ExternalLink className="h-3 w-3" />
-                            Ver Código
+                            {isActa ? 'Ver acta' : 'Ver Código'}
                         </button>
                         <button
                             onClick={handleDownload}

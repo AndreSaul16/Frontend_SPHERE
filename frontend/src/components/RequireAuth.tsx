@@ -20,5 +20,11 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  // Gate de verificación: cuentas email/password sin verificar van a /verify-email.
+  // (Google/GitHub vienen ya verificadas; el backend no otorga créditos hasta verificar.)
+  if (user.providerId === 'password' && !user.emailVerified) {
+    return <Navigate to="/verify-email" replace />;
+  }
+
   return <>{children}</>;
 }

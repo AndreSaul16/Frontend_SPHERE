@@ -1,10 +1,12 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { Send, Square, Paperclip, MoreVertical, Zap, ShieldCheck, Search, X, Download, Pin } from "lucide-react";
+import { Send, Square, Paperclip, MoreVertical, Zap, ShieldCheck, Search, X, Download, Pin, Hand } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChatStore, getGroupMembers } from "@/store/useChatStore";
 import { chatService } from "@/services/api";
 import { MessageBubble } from "./MessageBubble";
+import { BoardWarRoom } from "./BoardWarRoom";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 import { cn } from "@/lib/utils";
 import { exportAsMarkdown, downloadAsFile } from "@/utils/exportChat";
 import { CreditsIndicator } from "@/components/CreditsIndicator";
@@ -23,7 +25,8 @@ export function ChatPanel() {
         streamingSessionIds,
         loadSession,
         getCurrentMessages,
-        toggleAgentModal
+        toggleAgentModal,
+        boardSession,
     } = useChatStore();
 
     const messages = getCurrentMessages();
@@ -200,10 +203,30 @@ export function ChatPanel() {
         }
     };
 
+    // Board V2: ¿podemos intervenir en el debate en curso? (input desbloqueado)
+    const canIntervene = isTyping && isGroupChat && !!boardSession?.active;
+    const [interveneState, setInterveneState] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+    const handleIntervene = async () => {
+        const text = inputValue.trim();
+        if (!text || !currentSessionId) return;
+        setInputValue("");
+        setInterveneState('sending');
+        try {
+            await chatService.intervene(currentSessionId, text);
+            setInterveneState('sent');
+            setTimeout(() => setInterveneState('idle'), 2500);
+        } catch (e) {
+            setInterveneState('idle');
+            setInputValue((cur) => cur || text);
+        }
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleSendMessage();
+            if (canIntervene) handleIntervene();
+            else handleSendMessage();
         }
     };
 
@@ -265,24 +288,8 @@ export function ChatPanel() {
                             </p>
                         </div>
 
-                        {/* Features rápidos */}
-                        <div className="grid grid-cols-2 gap-3 w-full">
-                            {[
-                                { icon: "🏛️", label: "Junta Directiva", desc: "Orquestación multi-agente" },
-                                { icon: "🧠", label: "Expertos IA", desc: "C-Suite especializado" },
-                                { icon: "📊", label: "Artifacts", desc: "Código y análisis en vivo" },
-                                { icon: "🔒", label: "Encriptado", desc: "Canal seguro E2E" },
-                            ].map((feat) => (
-                                <div
-                                    key={feat.label}
-                                    className="p-3 rounded-xl bg-white/[0.02] border border-white/5 text-left hover:border-electric-cyan/20 transition-colors"
-                                >
-                                    <span className="text-lg">{feat.icon}</span>
-                                    <p className="text-white text-xs font-semibold mt-1">{feat.label}</p>
-                                    <p className="text-gray-500 text-[10px]">{feat.desc}</p>
-                                </div>
-                            ))}
-                        </div>
+                        {/* Onboarding first-run: checklist de 3 pasos */}
+                        <OnboardingChecklist onPrimaryAction={() => toggleAgentModal(true)} />
 
                         {/* CTA */}
                         <motion.button
@@ -366,6 +373,13 @@ export function ChatPanel() {
                 </div>
             </header>
 
+            {/* Board V2 war-room: directores en sesión, fases y votos en vivo */}
+            <AnimatePresence>
+                {isGroupChat && boardSession?.active && (
+                    <BoardWarRoom board={boardSession} agents={agents} />
+                )}
+            </AnimatePresence>
+
             {/* Search Bar */}
             <AnimatePresence>
                 {isSearchOpen && (
@@ -418,10 +432,11 @@ export function ChatPanel() {
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <h2 className="text-white font-bold text-xl uppercase tracking-widest">Iniciando Protocolo</h2>
+                                <h2 className="text-white font-bold text-xl uppercase tracking-widest">Listo para empezar</h2>
                                 <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
-                                    Canal listo para comunicación de alta fidelidad.
-                                    Envía un mensaje para despertar el sistema.
+                                    {isGroupChat
+                                        ? "Plantea una decisión y tu junta debatirá para darte una recomendación."
+                                        : "Escribe tu primer mensaje para empezar la conversación."}
                                 </p>
                             </div>
                         </motion.div>
@@ -474,11 +489,28 @@ export function ChatPanel() {
             {/* Input Section */}
             <div className="p-6 bg-gradient-to-t from-midnight/80 to-transparent z-10">
                 <div className="max-w-4xl mx-auto">
+                    {/* Banner de intervención durante el debate */}
+                    <AnimatePresence>
+                        {canIntervene && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="flex items-center gap-2 px-4 mb-2 text-[10px] font-mono uppercase tracking-widest text-electric-cyan/80"
+                            >
+                                <Hand className="h-3 w-3" />
+                                {interveneState === 'sent'
+                                    ? "Intervención registrada — entrará antes de la siguiente fase"
+                                    : "Debate en curso — puedes intervenir; tu mensaje entrará antes de la siguiente fase"}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                     <motion.div
                         initial={false}
-                        animate={isTyping ? { opacity: 0.5, y: 10 } : { opacity: 1, y: 0 }}
+                        animate={(isTyping && !canIntervene) ? { opacity: 0.5, y: 10 } : { opacity: 1, y: 0 }}
                         className={cn(
                             "glass-panel rounded-[24px] border border-white/10 p-2 flex items-end gap-2 group transition-all duration-500",
+                            canIntervene && "focus-within:border-electric-cyan/40 focus-within:shadow-[0_0_30px_rgba(0,245,212,0.15)]",
                             !isTyping && "focus-within:border-luxury-purple/40 focus-within:shadow-[0_0_30px_rgba(157,133,255,0.15)] shadow-2xl"
                         )}
                     >
@@ -519,11 +551,28 @@ export function ChatPanel() {
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder={isTyping ? "Sistema ocupado..." : "Transmite tu consulta..."}
+                            placeholder={canIntervene ? "Intervenir en el debate…" : isTyping ? "Sistema ocupado..." : "Transmite tu consulta..."}
                             className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder:text-gray-600 resize-none py-3.5 max-h-48 text-[15px] leading-relaxed font-medium"
                             rows={1}
-                            disabled={isTyping}
+                            disabled={isTyping && !canIntervene}
                         />
+
+                        {/* Botón intervenir (durante el debate, junto al Stop) */}
+                        {canIntervene && (
+                            <button
+                                onClick={handleIntervene}
+                                disabled={!inputValue.trim() || interveneState === 'sending'}
+                                title="Intervenir en el debate"
+                                className={cn(
+                                    "p-3.5 rounded-xl transition-all duration-300",
+                                    inputValue.trim()
+                                        ? "bg-electric-cyan/80 text-midnight shadow-[0_0_20px_rgba(0,245,212,0.4)] hover:scale-105"
+                                        : "bg-white/5 text-gray-600 cursor-not-allowed"
+                                )}
+                            >
+                                <Hand className="h-5 w-5" />
+                            </button>
+                        )}
 
                         {isTyping ? (
                             <button
@@ -551,8 +600,14 @@ export function ChatPanel() {
 
                     <div className="flex justify-between items-center px-4 mt-3">
                         <div className="flex items-center gap-4">
-                            <span className="text-[9px] font-mono text-gray-600 uppercase tracking-widest">Latencia: 24ms</span>
-                            <span className="text-[9px] font-mono text-gray-600 uppercase tracking-widest">Tokens: 0.8k/min</span>
+                            {/* Chip de coste de la acción: board grupal ≈5⚡ (o 3 si el triage reduce), directo 1⚡ */}
+                            <span
+                                className="flex items-center gap-1 text-[9px] font-mono text-gray-500 uppercase tracking-widest"
+                                title={isGroupChat ? "Un debate de la junta cuesta hasta 5 créditos (3 si el triage reduce los participantes)" : "Un mensaje cuesta 1 crédito"}
+                            >
+                                <Zap className="h-3 w-3 text-electric-cyan/70" />
+                                {isGroupChat ? `${boardSession?.cost ?? 5} por debate` : "1 por mensaje"}
+                            </span>
                         </div>
                         <p className="text-[9px] text-gray-700 font-mono uppercase tracking-tighter">
                             Powered by SPHERE Neuro-Link v2.0

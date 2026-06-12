@@ -1,6 +1,22 @@
 import { create } from 'zustand';
-import type { Agent, Message, Role, ChatSession } from '../types';
+import type { Agent, Message, Role, ChatSession, BoardVote, BoardPhase } from '../types';
 import type { Artifact } from '../types/artifact';
+
+// Board V2: estado vivo del debate para la cabecera "war-room".
+export type BoardAgentStatus = 'idle' | 'speaking' | 'done';
+export interface BoardSessionState {
+    active: boolean;
+    phase: BoardPhase | null;
+    participants: string[];       // roles que debaten (CTO/CFO/CMO)
+    statusByRole: Record<string, BoardAgentStatus>;
+    votes: Record<string, BoardVote>;
+    tally: Record<string, number> | null;
+    unanimous: boolean;
+    earlyExit: boolean;
+    cost: number;                 // créditos reales del debate (3 o 5)
+    devil: boolean;
+    lastIntervention: string | null;
+}
 import { v4 as uuidv4 } from 'uuid';
 import { chatService } from '../services/api';
 import { NetworkError, SessionError, type ErrorContext } from '../lib/errors';
@@ -22,6 +38,7 @@ interface ChatState {
     streamingArtifactBySession: Record<string, string | null>;
     activeArtifactId: string | null;
     errorStates: Record<ErrorContext, string | null>; // Errores por método
+    boardSession: BoardSessionState | null; // Board V2: estado vivo del debate (war-room)
 
     // Acciones
     fetchCustomAgents: () => Promise<void>;
@@ -118,6 +135,27 @@ const MOCK_AGENTS: Agent[] = [
     },
 ];
 
+// Board V2: el Abogado del Diablo NO es un experto seleccionable (no entra en
+// MOCK_AGENTS ni en getGroupMembers). Es un asiento opcional del debate; su
+// identidad visual se resuelve aquí cuando aparece en el war-room / burbujas.
+export const BOARD_DEVIL_AGENT: Agent = {
+    id: 'devil-1',
+    name: 'Némesis (Abogado del Diablo)',
+    role: 'DEVIL',
+    avatar: '⚔️',
+    description: 'Estresa la decisión: busca el fallo que el consenso ignora.',
+    color: 'text-rose-400',
+    hexColor: '#FF4D6D',
+    isOnline: true,
+};
+
+// Resuelve la identidad visual de un rol de board (incluido DEVIL, que no está
+// en la lista de agentes seleccionables).
+export const getBoardAgentByRole = (agents: Agent[], role: string): Agent | undefined => {
+    if (role === 'DEVIL') return BOARD_DEVIL_AGENT;
+    return agents.find(a => a.role === role && a.id !== 'group-chat');
+};
+
 // Helper: crear mensaje de saludo
 const createGreeting = (agentId: string, agents: Agent[]): Message => {
     const agent = agents.find(a => a.id === agentId);
@@ -149,6 +187,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     artifacts: [],
     activeArtifactId: null,
     streamingArtifactBySession: {},
+    boardSession: null,
     errorStates: {
         fetch_agents: null,
         create_session: null,
@@ -354,10 +393,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     }
 
                     // Validar que el role es un valor válido de Role (nunca 'assistant')
-                    const VALID_ROLES = ['user', 'system', 'CTO', 'CMO', 'CFO', 'CEO', 'specialist'];
+                    const VALID_ROLES = ['user', 'system', 'CTO', 'CMO', 'CFO', 'CEO', 'specialist', 'DEVIL'];
                     const candidateRole = foundAgent?.role || agentRole;
                     role = (candidateRole && VALID_ROLES.includes(candidateRole) ? candidateRole : 'CEO') as Role;
                     resolvedAgentId = foundAgent?.id;
+                    // Board V2: rol DEVIL no está en allAgents; resolver su identidad visual.
+                    if (!resolvedAgentId && agentRole === 'DEVIL') resolvedAgentId = BOARD_DEVIL_AGENT.id;
                 }
 
                 // --- LÓGICA DE RECUPERACIÓN DE ARTEFACTOS ---
@@ -397,12 +438,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     processedContent = processedContent.replace(fullTag, `\n\n[ARTIFACT:${artifactId}:${title}]\n\n`);
                 }
 
+                // Board V2: recuperar voto/fase/conclusión persistidos en additional_kwargs.
+                const rawVote = m.additional_kwargs?.board_vote;
+                const vote = (rawVote && typeof rawVote === 'object' && rawVote.decision)
+                    ? { decision: rawVote.decision, confidence: typeof rawVote.confidence === 'number' ? rawVote.confidence : 50 }
+                    : undefined;
+
                 return {
                     id: `history-${sessionId}-${idx}`,
                     role,
                     content: processedContent,
                     timestamp: new Date(m.additional_kwargs?.timestamp || Date.now()),
-                    agentId: resolvedAgentId || m.additional_kwargs?.agent_id || undefined
+                    agentId: resolvedAgentId || m.additional_kwargs?.agent_id || undefined,
+                    vote,
+                    phase: m.additional_kwargs?.board_phase || undefined,
+                    isConclusion: !!m.additional_kwargs?.is_conclusion,
                 };
             });
 
@@ -555,6 +605,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // activeBotMsgId es mutable: en board, cada agente abre su propia burbuja.
             const botMsgId = uuidv4();
             let activeBotMsgId = botMsgId;
+            // Board V2: mapa rol→id de burbuja para enrutar tokens que llegan
+            // intercalados (CTO/CFO/CMO debaten en paralelo). claimedInitial controla
+            // si la burbuja inicial vacía ya fue reclamada por el primer agente (CEO).
+            const bubbleByRole: Record<string, string> = {};
+            let claimedInitial = false;
             const botMsg: Message = {
                 id: botMsgId,
                 role: (targetRole || (isGroup ? 'CEO' : 'system')) as Role,
@@ -568,6 +623,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
                     ...state.messagesBySession,
                     [sessionId!]: [...(state.messagesBySession[sessionId!] || []), botMsg]
                 },
+                // Reiniciar el estado del war-room en cada nuevo envío de grupo.
+                boardSession: isGroup
+                    ? {
+                        active: false, phase: null, participants: [], statusByRole: {},
+                        votes: {}, tally: null, unanimous: false, earlyExit: false,
+                        cost: 5, devil: false, lastIntervention: null,
+                    }
+                    : null,
             }));
 
             // Usar una referencia local al sessionId para los callbacks
@@ -581,12 +644,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 content,
                 targetSessionId,
                 {
-                    onToken: (token) => {
+                    onToken: (token, role) => {
+                        // En board V2 el token trae rol → enrutar a la burbuja de ese
+                        // agente (debaten en paralelo). Si no hay rol, burbuja activa.
+                        const targetId = (role && bubbleByRole[role]) ? bubbleByRole[role] : activeBotMsgId;
                         set((state) => ({
                             messagesBySession: {
                                 ...state.messagesBySession,
                                 [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
-                                    msg.id === activeBotMsgId
+                                    msg.id === targetId
                                         ? { ...msg, content: msg.content + token }
                                         : msg
                                 ),
@@ -626,30 +692,102 @@ export const useChatStore = create<ChatState>((set, get) => ({
                                 next.splice(idx >= 0 ? idx : next.length, 0, sysMsg);
                                 return {
                                     messagesBySession: { ...state.messagesBySession, [targetSessionId]: next },
+                                    boardSession: state.boardSession
+                                        ? { ...state.boardSession, active: true }
+                                        : state.boardSession,
                                 };
                             });
                         } catch (e) {
                             if (import.meta.env.DEV) console.error('onBoardStart error:', e);
                         }
                     },
+                    onBoardPlan: (data) => {
+                        set((state) => ({
+                            boardSession: state.boardSession
+                                ? {
+                                    ...state.boardSession,
+                                    active: true,
+                                    participants: data.participants,
+                                    cost: data.cost,
+                                    statusByRole: data.participants.reduce(
+                                        (acc, r) => ({ ...acc, [r]: 'idle' as BoardAgentStatus }),
+                                        { ...state.boardSession.statusByRole }
+                                    ),
+                                }
+                                : state.boardSession,
+                        }));
+                    },
+                    onBoardPhase: (data) => {
+                        set((state) => ({
+                            boardSession: state.boardSession
+                                ? { ...state.boardSession, phase: data.phase as BoardPhase }
+                                : state.boardSession,
+                        }));
+                    },
+                    onBoardVote: (data) => {
+                        const vote: BoardVote = {
+                            decision: (data.vote as BoardVote['decision']) || 'CONDICIONAL',
+                            confidence: typeof data.confidence === 'number' ? data.confidence : 50,
+                        };
+                        set((state) => {
+                            // Pintar el voto como chip en la última burbuja de ese rol.
+                            const bubbleId = bubbleByRole[data.role];
+                            const msgs = (state.messagesBySession[targetSessionId] || []).map(m =>
+                                m.id === bubbleId ? { ...m, vote } : m
+                            );
+                            return {
+                                messagesBySession: { ...state.messagesBySession, [targetSessionId]: msgs },
+                                boardSession: state.boardSession
+                                    ? {
+                                        ...state.boardSession,
+                                        votes: { ...state.boardSession.votes, [data.role]: vote },
+                                        statusByRole: { ...state.boardSession.statusByRole, [data.role]: 'done' },
+                                    }
+                                    : state.boardSession,
+                            };
+                        });
+                    },
+                    onBoardConsensus: (data) => {
+                        set((state) => ({
+                            boardSession: state.boardSession
+                                ? {
+                                    ...state.boardSession,
+                                    tally: data.tally,
+                                    unanimous: data.unanimous,
+                                    earlyExit: data.early_exit,
+                                }
+                                : state.boardSession,
+                        }));
+                    },
+                    onBoardIntervention: (data) => {
+                        set((state) => ({
+                            boardSession: state.boardSession
+                                ? { ...state.boardSession, lastIntervention: data.text }
+                                : state.boardSession,
+                        }));
+                    },
                     onBoardAgent: (data) => {
-                        // Board meeting: cada agente que empieza a hablar abre su
-                        // propia burbuja (estilo WhatsApp). Si la burbuja activa aún
-                        // está vacía (primer agente), la reetiquetamos en vez de
-                        // crear una nueva, para no dejar una burbuja huérfana.
+                        // Board V2: cada agente (CEO apertura, CTO/CFO/CMO en paralelo,
+                        // devil, síntesis) abre SU propia burbuja, indexada por rol en
+                        // bubbleByRole. El primer agente (CEO apertura) reclama la
+                        // burbuja inicial vacía; el resto crean burbuja nueva.
                         try {
-                            const matchingAgent = allAgents.find(a => a.role === data.role && a.id !== 'group-chat');
+                            const matchingAgent = getBoardAgentByRole(allAgents, data.role);
+                            const phase = data.phase as BoardPhase | undefined;
                             const msgs = get().messagesBySession[targetSessionId] || [];
-                            const active = msgs.find(m => m.id === activeBotMsgId);
-                            const isEmpty = !!active && !active.content.trim() && !(active.thinking || '').trim();
+                            const initial = msgs.find(m => m.id === botMsgId);
+                            const initialEmpty = !claimedInitial && !!initial && !initial.content.trim() && !(initial.thinking || '').trim();
 
-                            if (isEmpty) {
+                            if (initialEmpty) {
+                                claimedInitial = true;
+                                activeBotMsgId = botMsgId;
+                                bubbleByRole[data.role] = botMsgId;
                                 set((state) => ({
                                     messagesBySession: {
                                         ...state.messagesBySession,
                                         [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(m =>
-                                            m.id === activeBotMsgId
-                                                ? { ...m, role: data.role as Role, agentId: matchingAgent?.id ?? m.agentId, isConclusion: data.is_conclusion }
+                                            m.id === botMsgId
+                                                ? { ...m, role: data.role as Role, agentId: matchingAgent?.id ?? m.agentId, isConclusion: data.is_conclusion, phase }
                                                 : m
                                         ),
                                     },
@@ -657,6 +795,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             } else {
                                 const newId = uuidv4();
                                 activeBotMsgId = newId;
+                                bubbleByRole[data.role] = newId;
                                 set((state) => ({
                                     messagesBySession: {
                                         ...state.messagesBySession,
@@ -669,24 +808,38 @@ export const useChatStore = create<ChatState>((set, get) => ({
                                                 timestamp: new Date(),
                                                 agentId: matchingAgent?.id,
                                                 isConclusion: data.is_conclusion,
+                                                phase,
                                             },
                                         ],
                                     },
                                 }));
                             }
+                            // Actualizar estado del war-room: este rol pasa a "hablando".
+                            set((state) => ({
+                                boardSession: state.boardSession
+                                    ? {
+                                        ...state.boardSession,
+                                        active: true,
+                                        phase: phase ?? state.boardSession.phase,
+                                        statusByRole: { ...state.boardSession.statusByRole, [data.role]: 'speaking' },
+                                        devil: state.boardSession.devil || data.role === 'DEVIL',
+                                    }
+                                    : state.boardSession,
+                            }));
                         } catch (e) {
                             if (import.meta.env.DEV) console.error('onBoardAgent error:', e);
                         }
                     },
-                    onThinking: (piece) => {
-                        // Línea de pensamiento (reasoning_content de DeepSeek) → se
-                        // acumula en la burbuja activa y se pinta colapsable.
+                    onThinking: (piece, role) => {
+                        // Razonamiento (reasoning_content) → se acumula en la burbuja
+                        // del rol que piensa (board V2) o en la activa.
+                        const targetId = (role && bubbleByRole[role]) ? bubbleByRole[role] : activeBotMsgId;
                         try {
                             set((state) => ({
                                 messagesBySession: {
                                     ...state.messagesBySession,
                                     [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(m =>
-                                        m.id === activeBotMsgId
+                                        m.id === targetId
                                             ? { ...m, thinking: (m.thinking || '') + piece }
                                             : m
                                     ),
@@ -769,6 +922,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                         set((state) => ({
                             streamingSessionIds: state.streamingSessionIds.filter(id => id !== targetSessionId),
                             abortController: null,
+                            boardSession: state.boardSession
+                                ? { ...state.boardSession, active: false }
+                                : state.boardSession,
                         }));
                     },
                     onError: () => {
@@ -837,6 +993,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         sessionsByAgent: {},
         activeArtifactId: null,
         streamingArtifactBySession: {},
+        boardSession: null,
         errorStates: {
             fetch_agents: null,
             create_session: null,

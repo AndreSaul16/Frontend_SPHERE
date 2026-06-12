@@ -225,10 +225,25 @@ async def _auto_provision_user(firebase_claims: dict) -> dict:
     user = await users_col.find_one({"firebase_uid": uid})
 
     if user:
-        await users_col.update_one(
-            {"firebase_uid": uid},
-            {"$set": {"last_login_at": datetime.now(timezone.utc)}},
-        )
+        now = datetime.now(timezone.utc)
+        update_set = {"last_login_at": now}
+
+        # Upgrade al verificar email: si el usuario estaba como email_unverified
+        # (0 créditos) y el claim de Firebase ya dice verificado, lo activamos y
+        # le otorgamos sus créditos gratis UNA sola vez.
+        was_unverified = (user.get("subscription") or {}).get("status") == "email_unverified"
+        if email_verified and was_unverified:
+            free_credits = settings.plan_messages_map["free"]
+            update_set["subscription.status"] = "active"
+            update_set["email_verified"] = True
+            update_set["wallet.pro_messages_balance"] = free_credits
+            update_set["wallet.pro_messages_granted_this_period"] = free_credits
+            update_set["wallet.last_period_reset"] = now
+            logger.info(f"✅ Email verificado para {uid}: activando cuenta y otorgando {free_credits} créditos")
+
+        await users_col.update_one({"firebase_uid": uid}, {"$set": update_set})
+        # Releer para devolver el estado actualizado (incluye el grant si aplicó).
+        user = await users_col.find_one({"firebase_uid": uid})
         user = await _ensure_wallet(uid, user)
         user.pop("_id", None)
         return user

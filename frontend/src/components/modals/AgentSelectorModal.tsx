@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import type { Role } from '@/types';
 import { AgentCreationWizard } from './AgentCreationWizard';
+import { BoardActivationModal } from './BoardActivationModal';
+import { chatService } from '@/services/api';
 
 const getRoleIcon = (role: Role) => {
     switch (role) {
@@ -32,6 +34,8 @@ export function AgentSelectorModal() {
     const [searchQuery, setSearchQuery] = useState("");
     const [isWizardOpen, setIsWizardOpen] = useState(false);
     const [isLoadingSession, setIsLoadingSession] = useState(false);
+    // Board activation modal: al elegir "Junta Directiva" sin debate activado.
+    const [boardModalOpen, setBoardModalOpen] = useState(false);
 
     useEffect(() => {
         if (isAgentModalOpen) {
@@ -57,7 +61,7 @@ export function AgentSelectorModal() {
     const filteredCustomExperts = filterBySearch(customExperts);
     const showGroupChat = !searchQuery || groupChat?.name.toLowerCase().includes(searchQuery.toLowerCase()) || 'junta directiva'.includes(searchQuery.toLowerCase());
 
-    const handleSelectAgent = async (agentId: string) => {
+    const openSession = async (agentId: string) => {
         if (isLoadingSession) return;
         setIsLoadingSession(true);
         try {
@@ -67,6 +71,31 @@ export function AgentSelectorModal() {
         } finally {
             setIsLoadingSession(false);
         }
+    };
+
+    const handleSelectAgent = async (agentId: string) => {
+        // Servicio estrella: al crear una Junta Directiva, si el debate no está
+        // activado, ofrecemos activarlo en 1 clic (con su coste) en vez de obligar
+        // a ir a Configuración.
+        if (agentId === 'group-chat') {
+            try {
+                const settings = await chatService.getBoardSettings();
+                if (!settings.board_meeting_enabled) {
+                    setBoardModalOpen(true);
+                    return;
+                }
+            } catch { /* si falla, seguimos al chat igualmente */ }
+        }
+        await openSession(agentId);
+    };
+
+    const handleActivateBoard = async (devil: boolean) => {
+        setIsLoadingSession(true);
+        try {
+            await chatService.updateBoardSettings({ board_meeting_enabled: true, board_devils_advocate: devil });
+        } catch { /* continuamos aunque el PATCH falle */ }
+        setBoardModalOpen(false);
+        await openSession('group-chat');
     };
 
     const handleAgentCreated = (_agentId: string) => {
@@ -255,6 +284,13 @@ export function AgentSelectorModal() {
             isOpen={isWizardOpen}
             onClose={() => setIsWizardOpen(false)}
             onAgentCreated={handleAgentCreated}
+        />
+        <BoardActivationModal
+            open={boardModalOpen}
+            loading={isLoadingSession}
+            onActivate={handleActivateBoard}
+            onRouterOnly={() => { setBoardModalOpen(false); openSession('group-chat'); }}
+            onClose={() => setBoardModalOpen(false)}
         />
         </>
     );

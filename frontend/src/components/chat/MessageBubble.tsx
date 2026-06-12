@@ -36,11 +36,12 @@ interface MessageBubbleProps {
  * - Fallback sintético: si aún no hay razonamiento ni contenido pero está
  *   streameando, muestra un "Pensando…" animado para no dejar la burbuja muda.
  */
-function ThinkingBlock({ thinking, isStreaming, hasContent, hexColor }: {
+function ThinkingBlock({ thinking, isStreaming, hasContent, hexColor, label }: {
     thinking?: string;
     isStreaming: boolean;
     hasContent: boolean;
     hexColor: string;
+    label?: string;
 }) {
     const [userToggled, setUserToggled] = useState(false);
     const [open, setOpen] = useState(false);
@@ -53,7 +54,7 @@ function ThinkingBlock({ thinking, isStreaming, hasContent, hexColor }: {
             return (
                 <div className="flex items-center gap-2 mb-2 text-[11px] text-text-secondary/70 italic">
                     <Brain className="h-3 w-3 animate-pulse" style={{ color: hexColor }} />
-                    <span>Pensando</span>
+                    <span>{label || 'Pensando'}</span>
                     <span className="inline-flex gap-0.5">
                         <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2 }}>.</motion.span>
                         <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 1.2, delay: 0.2 }}>.</motion.span>
@@ -117,6 +118,16 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
     // HUD Colors: prioridad sesión > agente > fallback
     const defaultColor = '#00F0C8'; // Cyan
     const activeHexColor = agentColor || agent?.hexColor || defaultColor;
+
+    // Board V2: etiqueta de "pensando" específica por rol y fase (en vez del genérico).
+    const thinkingLabel = (() => {
+        const who = agent ? agent.name.split(' ')[0] : message.role;
+        if (message.phase === 'rebuttal') return `${who} prepara su réplica`;
+        if (message.phase === 'synthesis') return `${who} redacta el acta`;
+        if (message.phase === 'devil') return `${who} busca el punto débil`;
+        if (message.phase === 'analysis') return `${who} está analizando`;
+        return undefined;
+    })();
 
     if (isSystem) {
         return (
@@ -219,6 +230,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                             isStreaming={!!isTyping && !!isLast}
                             hasContent={!!message.content.trim()}
                             hexColor={activeHexColor}
+                            label={thinkingLabel}
                         />
                     )}
 
@@ -451,11 +463,19 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                             )}
                         </div>
 
-                        {/* Timestamp + freq */}
+                        {/* Chip de voto (board V2) + timestamp */}
                         <div className="flex items-center gap-2">
-                            {!isUser && (
-                                <span className="text-[8px] sm:text-[9px] opacity-30 font-mono tracking-tighter uppercase">
-                                    freq: {Math.floor(Math.random() * 900 + 100)}mhz
+                            {!isUser && message.vote && (
+                                <span
+                                    className="px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold font-mono tracking-wider border"
+                                    style={{
+                                        color: activeHexColor,
+                                        borderColor: `${activeHexColor}40`,
+                                        backgroundColor: `${activeHexColor}12`,
+                                    }}
+                                    title={`Voto: ${message.vote.decision} · confianza ${message.vote.confidence}%`}
+                                >
+                                    {message.vote.decision === 'SI' ? '✓ A FAVOR' : message.vote.decision === 'NO' ? '✗ EN CONTRA' : '~ CONDICIONAL'} · {message.vote.confidence}%
                                 </span>
                             )}
                             <span className="text-[9px] sm:text-[10px] opacity-30">

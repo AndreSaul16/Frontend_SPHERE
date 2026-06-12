@@ -11,6 +11,7 @@ import { ProfilePage } from "@/pages/ProfilePage";
 import { ChatSettingsPage } from "@/pages/ChatSettingsPage";
 import { AgentDetailPage } from "@/pages/AgentDetailPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { VerifyEmailPage } from "@/pages/VerifyEmailPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { AuroraBackground } from "@/components/AuroraBackground";
 import { ErrorOverlay } from "@/components/common/ErrorOverlay";
@@ -33,6 +34,8 @@ function AuthenticatedApp() {
     <Routes>
       {/* Public route */}
       <Route path="/login" element={<LoginPage />} />
+      {/* Verificación de email (cuentas password sin verificar) */}
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
 
       {/* Protected routes */}
       <Route

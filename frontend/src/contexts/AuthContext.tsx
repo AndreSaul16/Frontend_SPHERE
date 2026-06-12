@@ -16,6 +16,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
+  sendEmailVerification,
   type User as FirebaseUser,
 } from "firebase/auth";
 import { auth, googleProvider, githubProvider } from "@/lib/firebase";
@@ -25,6 +26,8 @@ interface AuthUser {
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  emailVerified: boolean;
+  providerId: string; // 'password' | 'google.com' | 'github.com'
 }
 
 interface AuthContextType {
@@ -36,6 +39,8 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithGithub: () => Promise<void>;
   signOut: () => Promise<void>;
+  resendVerification: () => Promise<void>;
+  reloadUser: () => Promise<boolean>; // devuelve emailVerified tras refrescar
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
+          emailVerified: firebaseUser.emailVerified,
+          providerId: firebaseUser.providerData[0]?.providerId || 'password',
         });
         const token = await firebaseUser.getIdToken();
         setIdToken(token);
@@ -86,7 +93,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUpWithEmail = useCallback(async (email: string, password: string) => {
-    await createUserWithEmailAndPassword(auth, email, password);
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    // Enviar email de verificación: el backend no otorga créditos ni deja usar
+    // /stream hasta que el email esté verificado.
+    try {
+      await sendEmailVerification(cred.user);
+    } catch (e) {
+      if (import.meta.env.DEV) console.error("sendEmailVerification falló:", e);
+    }
+  }, []);
+
+  const resendVerification = useCallback(async () => {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+  }, []);
+
+  const reloadUser = useCallback(async (): Promise<boolean> => {
+    const cur = auth.currentUser;
+    if (!cur) return false;
+    await cur.reload();
+    // Forzar refresco del token para que el backend reciba el claim email_verified=true.
+    const token = await cur.getIdToken(true);
+    setIdToken(token);
+    setUser({
+      uid: cur.uid,
+      email: cur.email,
+      displayName: cur.displayName,
+      photoURL: cur.photoURL,
+      emailVerified: cur.emailVerified,
+      providerId: cur.providerData[0]?.providerId || 'password',
+    });
+    return cur.emailVerified;
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
@@ -117,6 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInWithGoogle,
         signInWithGithub,
         signOut,
+        resendVerification,
+        reloadUser,
       }}
     >
       {children}

@@ -1,7 +1,22 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useChatStore, getBoardAgentByRole } from '@/store/useChatStore';
 
 export const AuroraBackground: React.FC = () => {
+    // Board V2: la aurora reacciona al color del director que está hablando.
+    const boardSession = useChatStore(state => state.boardSession);
+    const getAgents = useChatStore(state => state.getAgents);
+
+    const accentColor = React.useMemo(() => {
+        if (!boardSession?.active) return null;
+        const speaking = Object.entries(boardSession.statusByRole).find(([, s]) => s === 'speaking');
+        if (!speaking) return null;
+        const agent = getBoardAgentByRole(getAgents(), speaking[0]);
+        return agent?.hexColor || null;
+    }, [boardSession?.active, boardSession?.statusByRole, getAgents]);
+
+    const reactive = !!accentColor;
+
     return (
         <div className="aurora-container">
             {/* Deep Blue Base */}
@@ -19,18 +34,20 @@ export const AuroraBackground: React.FC = () => {
                 }}
             />
 
-            {/* Electric Cyan Accent */}
+            {/* Electric Cyan Accent → se tiñe y agranda con el agente que habla */}
             <motion.div
-                className="aurora-blob w-[500px] h-[500px] bg-electric-cyan/10 bottom-[10%] right-[-5%]"
+                className="aurora-blob w-[500px] h-[500px] bottom-[10%] right-[-5%]"
                 animate={{
                     x: [0, -40, 0],
                     y: [0, 50, 0],
-                    scale: [1, 1.2, 1],
+                    scale: reactive ? [1.1, 1.35, 1.1] : [1, 1.2, 1],
+                    backgroundColor: accentColor ? `${accentColor}20` : 'rgba(0,245,212,0.10)',
                 }}
                 transition={{
-                    duration: 25,
+                    duration: reactive ? 6 : 25,
                     repeat: Infinity,
-                    ease: "easeInOut"
+                    ease: "easeInOut",
+                    backgroundColor: { duration: 1.2 },
                 }}
             />
 

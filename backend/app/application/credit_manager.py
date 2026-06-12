@@ -36,6 +36,9 @@ TOKEN_CAP_PER_MESSAGE = 4000
 # Un board meeting ejecuta ~5 agentes (CEO/CTO/CFO/CMO + conclusión) ×(1-2 iter),
 # por lo que consume ~5× el cómputo de un chat normal. Se cobra como 5 créditos.
 BOARD_MEETING_COST = 5
+# Board V2: si el triage reduce el debate a 2 directores, el coste efectivo baja a 3
+# (se reembolsan 2 créditos). Ver CreditManager.partial_refund.
+BOARD_REDUCED_COST = 3
 
 
 class CreditManager:
@@ -162,6 +165,32 @@ class CreditManager:
             "created_at": datetime.now(timezone.utc),
         })
 
+    def partial_refund(self, ctx: ChargeContext, amount: int, reason: str = "board_triage_reduced"):
+        """Devuelve PARTE del cobro (al mismo bucket). Usado cuando el triage del board
+        reduce el nº de directores (5 → 3 créditos): se reembolsan los créditos sobrantes.
+        amount se clampa a [0, ctx.cost] para no devolver de más."""
+        amount = max(0, min(int(amount), ctx.cost))
+        if amount == 0:
+            return
+        field = (
+            "wallet.pro_messages_balance"
+            if ctx.source == "plan"
+            else "wallet.topup_messages_balance"
+        )
+        self.users_collection.update_one(
+            {"firebase_uid": ctx.user_id},
+            {"$inc": {field: amount}},
+        )
+        self.transactions_collection.insert_one({
+            "_id": f"tx_{uuid.uuid4().hex}",
+            "user_id": ctx.user_id,
+            "delta": amount,
+            "balance_source": ctx.source,
+            "reason": reason,
+            "ref_tx_id": ctx.tx_id,
+            "created_at": datetime.now(timezone.utc),
+        })
+
     # --- Async wrappers para uso desde FastAPI / orchestrator. ---
 
     async def areserve_and_charge(
@@ -189,6 +218,9 @@ class CreditManager:
 
     async def arefund(self, ctx: ChargeContext, reason: str = "inference_failed"):
         return await asyncio.to_thread(self.refund, ctx, reason)
+
+    async def apartial_refund(self, ctx: ChargeContext, amount: int, reason: str = "board_triage_reduced"):
+        return await asyncio.to_thread(self.partial_refund, ctx, amount, reason)
 
     # --- Helpers privados. ---
 
