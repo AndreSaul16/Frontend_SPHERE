@@ -58,9 +58,14 @@ El código ya está completo (registry de tools, cliente n8n, auto-deploy de wor
 
 ---
 
-## 5. Pendientes opcionales (hardening, no bloquean el uso)
+## 5. Hardening (implementado 2026-06-12)
 
-- **Verificación HMAC en los workflows**: el backend firma con `X-Webhook-Signature` pero los workflows aún no la verifican. Añadir un nodo de verificación en cada workflow (requiere editar los 16 JSON) cierra el hueco de que alguien con la URL del webhook dispare tools.
-- **Surface de errores de tools en el chat con botón de reintento**: hoy el error de una tool fallida lo narra el agente; falta un componente visual de error + retry explícito.
+- **Verificación HMAC en los workflows** ✅ — cada workflow tiene un nodo `Verify Signature` tras el Webhook que recomputa la firma HMAC-SHA256 sobre la forma canónica del payload (claves ordenadas, sin espacios, UTF-8) y compara en tiempo constante con `X-Webhook-Signature`. Sin firma válida, el webhook devuelve error y la tool no se ejecuta. Requiere en el **servicio n8n**: `N8N_WEBHOOK_SECRET` (mismo valor que el backend) y `NODE_FUNCTION_ALLOW_BUILTIN=crypto`. El nodo se inserta con `backend/infrastructure/scripts/add_hmac_verification.py` (idempotente).
+- **Surface de errores de tools en el chat** ✅ — el backend emite el evento SSE `tool_error` cuando una tool devuelve `{"error": true}` (el flujo `confirmation_required` NO cuenta como error); el chat muestra una card roja con el mensaje y botón **Reintentar** que pide al agente repetir la acción.
+- **OAuth de Google compartido** ✅ (código) — si configuras `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` en el backend (Railway), los usuarios conectan Google Calendar directamente sin crear su propia app (la UI lo detecta sola). Una app BYO registrada por el usuario sigue teniendo prioridad. **Pendiente de operación:** crear la OAuth app oficial de SPHERE en Google Cloud Console (pantalla de consentimiento + verificación de Google) y poner las 2 env vars.
+- **Rate limiting con Redis** ✅ — servicio Redis en Railway; `REDIS_URL` del backend apunta a `redis.railway.internal`.
+
+## 6. Pendientes opcionales
+
 - **Catálogo visual de integraciones con logs por servicio**: la página ya lista servicios y estado; un catálogo con historial de ejecuciones sería el siguiente nivel.
-- **OAuth de Google compartido** (en vez de BYO) para quitar fricción de crear la app de Google.
+- **App OAuth de Google de SPHERE**: crearla en Google Cloud Console y configurar `GOOGLE_OAUTH_CLIENT_ID/SECRET` (ver §5).

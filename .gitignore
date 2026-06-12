@@ -72,3 +72,4 @@ build_log.txt
 status_backend.txt
 status_frontend.txt
 .claude/
+*.local.txt
