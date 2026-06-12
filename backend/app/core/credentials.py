@@ -218,8 +218,17 @@ class CredentialsService:
                 # GitHub tokens de OAuth App no expiran, solo los de GitHub App
                 return self._decrypt(cred["access_token_enc"])
 
-            # Notion/Slack: usar las creds de la OAuth app del propio usuario (BYO).
+            # Usar las creds de la OAuth app del propio usuario (BYO); para Google,
+            # si no hay BYO, caer a la app compartida de SPHERE (env).
             app = await self.get_oauth_app(user_id, provider)
+            if not app and provider == "google":
+                from app.core.config import settings as _settings
+
+                if _settings.GOOGLE_OAUTH_CLIENT_ID and _settings.GOOGLE_OAUTH_CLIENT_SECRET:
+                    app = {
+                        "client_id": _settings.GOOGLE_OAUTH_CLIENT_ID,
+                        "client_secret": _settings.GOOGLE_OAUTH_CLIENT_SECRET,
+                    }
             if not app:
                 logger.warning(
                     f"No hay OAuth app de {provider} registrada para user {user_id}; "

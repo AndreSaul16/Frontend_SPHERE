@@ -237,14 +237,14 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                     <div className="prose prose-invert prose-sm max-w-none break-words leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0">
                         {/* Process message content, detecting artifact + tool placeholders */}
                         {(() => {
-                            const combinedPattern = /\[ARTIFACT:([^:]+):([^\]]+)\]|\[TOOL_START:([^\]]+)\]|\[TOOL_RESULT:([^:]+):([^\]]*)\]/g;
+                            const combinedPattern = /\[ARTIFACT:([^:]+):([^\]]+)\]|\[TOOL_START:([^\]]+)\]|\[TOOL_RESULT:([^:]+):([^\]]*)\]|\[TOOL_ERROR:([^:]+):([^\]]*)\]/g;
                             const parts: React.ReactNode[] = [];
                             let lastIndex = 0;
                             let match;
                             let partKey = 0;
 
                             // Track tool states for rendering cards
-                            const toolStates: Record<string, { status: 'running' | 'completed'; result?: string }> = {};
+                            const toolStates: Record<string, { status: 'running' | 'completed' | 'failed'; result?: string }> = {};
 
                             const content = message.content;
 
@@ -356,6 +356,28 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                                                 result={toolResult}
                                             />
                                         );
+                                    }
+                                } else if (match[6]) {
+                                    // TOOL_ERROR match: [TOOL_ERROR:name:error]
+                                    const toolName = match[6];
+                                    const toolError = match[7] || '';
+                                    toolStates[toolName] = { status: 'failed', result: toolError };
+                                    // Replace the running card with a failed one
+                                    const runningIdx = parts.findIndex(
+                                        (p) => React.isValidElement(p) && (p.props as Record<string, unknown>)?.toolName === toolName && (p.props as Record<string, unknown>)?.status === 'running'
+                                    );
+                                    const failedCard = (
+                                        <ToolExecutionCard
+                                            key={`tool-fail-${partKey++}`}
+                                            toolName={toolName}
+                                            status="failed"
+                                            error={toolError}
+                                        />
+                                    );
+                                    if (runningIdx >= 0) {
+                                        parts[runningIdx] = failedCard;
+                                    } else {
+                                        parts.push(failedCard);
                                     }
                                 }
 

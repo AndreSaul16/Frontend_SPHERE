@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     # https://<backend>/api/v1/integrations
     OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000/api/v1/integrations"
 
+    # OAuth app COMPARTIDA de Google (opcional). Si se configura, los usuarios
+    # pueden conectar Google Calendar sin crear su propia app (sin fricción BYO).
+    # Una app BYO registrada por el usuario siempre tiene prioridad.
+    GOOGLE_OAUTH_CLIENT_ID: str = ""
+    GOOGLE_OAUTH_CLIENT_SECRET: str = ""
+
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 

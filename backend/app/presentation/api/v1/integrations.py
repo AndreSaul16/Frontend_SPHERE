@@ -34,6 +34,29 @@ def _redirect_uri(provider: str) -> str:
     return f"{settings.OAUTH_REDIRECT_BASE_URL}/{provider}/callback"
 
 
+def _shared_app(provider: str) -> Optional[dict]:
+    """OAuth app compartida de SPHERE para un provider, si está configurada por env."""
+    if (
+        provider == "google"
+        and settings.GOOGLE_OAUTH_CLIENT_ID
+        and settings.GOOGLE_OAUTH_CLIENT_SECRET
+    ):
+        return {
+            "client_id": settings.GOOGLE_OAUTH_CLIENT_ID,
+            "client_secret": settings.GOOGLE_OAUTH_CLIENT_SECRET,
+            "shared": True,
+        }
+    return None
+
+
+async def _resolve_oauth_app(user_id: str, provider: str) -> Optional[dict]:
+    """App OAuth a usar: la BYO del usuario tiene prioridad; si no hay, la compartida."""
+    app = await credentials_service.get_oauth_app(user_id, provider)
+    if app:
+        return app
+    return _shared_app(provider)
+
+
 def _default_scopes(provider: str) -> list[str]:
     """Scopes fijos por provider (definidos en el módulo del provider)."""
     raw = getattr(PROVIDERS[provider], "DEFAULT_SCOPES", "") or ""
@@ -93,8 +116,8 @@ async def connect_provider(
 
     user_id = user["firebase_uid"]
 
-    # BYO: el usuario debe haber registrado su propia OAuth app antes de conectar.
-    app = await credentials_service.get_oauth_app(user_id, provider)
+    # BYO con prioridad; si no hay app del usuario, usar la compartida de SPHERE.
+    app = await _resolve_oauth_app(user_id, provider)
     if not app:
         raise HTTPException(
             status_code=400,
@@ -153,8 +176,8 @@ async def provider_callback(
     if not _verify_state(state, user_id):
         raise HTTPException(status_code=400, detail="State inválido")
 
-    # Cargar la OAuth app del usuario (necesaria para el intercambio).
-    app = await credentials_service.get_oauth_app(user_id, provider)
+    # Cargar la OAuth app (BYO del usuario o compartida) para el intercambio.
+    app = await _resolve_oauth_app(user_id, provider)
     if not app:
         logger.warning(f"Callback {provider} sin OAuth app registrada (user {user_id})")
         raise HTTPException(
@@ -249,6 +272,9 @@ async def list_oauth_apps(user: dict = Depends(get_current_user)):
         "apps": apps,
         "available": list(PROVIDERS.keys()),
         "callback_urls": {p: _redirect_uri(p) for p in PROVIDERS},
+        # Providers con app compartida de SPHERE: el usuario puede conectar
+        # directamente sin registrar su propia OAuth app.
+        "shared": {p: _shared_app(p) is not None for p in PROVIDERS},
     }
 
 

@@ -12,7 +12,23 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [250, 300]
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst received = String((input.headers || {})['x-webhook-signature'] || '');\nconst secret = $env.N8N_WEBHOOK_SECRET || '';\nif (!secret) throw new Error('N8N_WEBHOOK_SECRET no configurado en n8n');\n\n// Forma canonica identica a la del backend:\n// json.dumps(payload, separators=(',', ':'), sort_keys=True, ensure_ascii=False)\nfunction canon(v) {\n  if (v === null || typeof v !== 'object') return JSON.stringify(v);\n  if (Array.isArray(v)) return '[' + v.map(canon).join(',') + ']';\n  return '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}';\n}\n\nconst expected = crypto.createHmac('sha256', secret)\n  .update(Buffer.from(canon(input.body || {}), 'utf8'))\n  .digest('hex');\nconst a = Buffer.from(received, 'utf8');\nconst b = Buffer.from(expected, 'utf8');\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {\n  throw new Error('Firma de webhook invalida');\n}\nreturn $input.all();"
+      },
+      "id": "verify-hmac-1",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        140
+      ]
     },
     {
       "parameters": {
@@ -22,7 +38,10 @@
       "name": "Extract Credentials",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -50,7 +69,10 @@
       "name": "Google Calendar API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
-      "position": [650, 300]
+      "position": [
+        650,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,14 +83,64 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [850, 300]
+      "position": [
+        850,
+        300
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{"node": "Extract Credentials", "type": "main", "index": 0}]] },
-    "Extract Credentials": { "main": [[{"node": "Google Calendar API", "type": "main", "index": 0}]] },
-    "Google Calendar API": { "main": [[{"node": "Respond", "type": "main", "index": 0}]] }
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Credentials": {
+      "main": [
+        [
+          {
+            "node": "Google Calendar API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Calendar API": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "Extract Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
-  "tags": [{ "name": "SPHERE" }]
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "SPHERE"
+    }
+  ]
 }

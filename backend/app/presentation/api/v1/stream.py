@@ -33,6 +33,27 @@ from app.core.logger import stream_logger as logger
 router = APIRouter()
 
 
+def _tool_error_message(raw_output: str) -> Optional[str]:
+    """Detecta si el resultado de una tool es un error real y extrae su mensaje.
+
+    Las tools devuelven JSON: error real = {"error": true, "message": ...}.
+    El caso {"error": "confirmation_required"} NO es un fallo (es el flujo de
+    confirmación que el agente narra al usuario), así que no se marca como error.
+    """
+    if not raw_output or '"error"' not in raw_output:
+        return None
+    try:
+        # El output puede venir envuelto (ToolMessage repr); intentar el JSON directo
+        parsed = json.loads(raw_output)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    if parsed.get("error") is True:
+        return str(parsed.get("message") or parsed.get("hint") or "La herramienta falló.")
+    return None
+
+
 async def _safe_refund(credit_manager, charge_ctx, user_id: str, reason: str) -> None:
     """Reembolsa créditos garantizando que un fallo del refund NO deje al usuario
     sin sus créditos en silencio (A3). Si el refund lanza, registramos la deuda en
@@ -304,9 +325,23 @@ async def generate_chat_events(
 
             if kind == "on_tool_end":
                 tool_name = event.get("name", "unknown_tool")
-                tool_output = str(event.get("data", {}).get("output", ""))[:500]
-                logger.info(f"✅ Tool end: {tool_name}")
-                yield f"data: {json.dumps({'type': 'tool_result', 'tool_name': tool_name, 'result': tool_output})}\n\n"
+                raw_output = event.get("data", {}).get("output", "")
+                if not isinstance(raw_output, str):
+                    raw_output = getattr(raw_output, "content", None) or str(raw_output)
+                tool_output = raw_output[:500]
+                error_msg = _tool_error_message(raw_output)
+                if error_msg:
+                    logger.warning(f"⚠️ Tool error: {tool_name}: {error_msg[:200]}")
+                    yield f"data: {json.dumps({'type': 'tool_error', 'tool_name': tool_name, 'error': error_msg[:300]})}\n\n"
+                else:
+                    logger.info(f"✅ Tool end: {tool_name}")
+                    yield f"data: {json.dumps({'type': 'tool_result', 'tool_name': tool_name, 'result': tool_output})}\n\n"
+
+            if kind == "on_tool_error":
+                tool_name = event.get("name", "unknown_tool")
+                exc = event.get("data", {}).get("error")
+                logger.warning(f"⚠️ Tool raised: {tool_name}: {exc}")
+                yield f"data: {json.dumps({'type': 'tool_error', 'tool_name': tool_name, 'error': str(exc)[:300]})}\n\n"
 
             # --- C. STREAMING DE TOKENS ---
             if kind == "on_chat_model_stream":

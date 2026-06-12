@@ -61,6 +61,7 @@ export interface StreamCallbacks {
     // TOOL EXECUTION: 2-event protocol for tool visibility
     onToolStart?: (data: { tool_name: string; args: Record<string, any> }) => void;
     onToolResult?: (data: { tool_name: string; result: string }) => void;
+    onToolError?: (data: { tool_name: string; error: string }) => void;
     onDone?: () => void;
     onError?: (error: any) => void;
 }
@@ -201,6 +202,11 @@ export const chatService = {
                             callbacks.onToolResult?.({
                                 tool_name: data.tool_name || 'unknown',
                                 result: data.result || '',
+                            });
+                        } else if (data.type === 'tool_error') {
+                            callbacks.onToolError?.({
+                                tool_name: data.tool_name || 'unknown',
+                                error: data.error || 'La herramienta falló.',
                             });
                         } else if (data.type === 'error') {
                             throw new Error(data.message || 'Unknown server error');
@@ -548,6 +554,8 @@ export interface OAuthAppsList {
     apps: OAuthAppInfo[];
     available: string[];
     callback_urls: Record<string, string>;
+    /** Providers con OAuth app compartida de SPHERE (conectar sin BYO). */
+    shared?: Record<string, boolean>;
 }
 
 export interface Contact {

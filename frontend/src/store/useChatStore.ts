@@ -918,6 +918,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
                             },
                         }));
                     },
+                    onToolError: (data) => {
+                        // El placeholder se parsea con regex: sanear ']' y saltos de línea
+                        const safeError = data.error.replace(/[\]\n\r]/g, ' ').substring(0, 200);
+                        set((state) => ({
+                            messagesBySession: {
+                                ...state.messagesBySession,
+                                [targetSessionId]: (state.messagesBySession[targetSessionId] || []).map(msg =>
+                                    msg.id === activeBotMsgId
+                                        ? { ...msg, content: msg.content + `\n[TOOL_ERROR:${data.tool_name}:${safeError}]\n` }
+                                        : msg
+                                ),
+                            },
+                        }));
+                    },
                     onDone: () => {
                         set((state) => ({
                             streamingSessionIds: state.streamingSessionIds.filter(id => id !== targetSessionId),

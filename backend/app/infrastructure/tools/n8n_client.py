@@ -51,10 +51,17 @@ class N8NClient:
             )
         return self._circuit_breaker
 
-    def _sign(self, body: bytes) -> str:
+    def _sign(self, payload: dict) -> str:
+        """Firma HMAC-SHA256 sobre la forma canónica del payload (claves ordenadas,
+        sin espacios, UTF-8 sin escapar). Los workflows de n8n no tienen acceso al
+        raw body (reciben el JSON ya parseado), así que ambos lados firman/verifican
+        la misma serialización canónica reconstruible desde el objeto."""
+        canonical = json.dumps(
+            payload, separators=(",", ":"), sort_keys=True, ensure_ascii=False
+        ).encode("utf-8")
         return hmac.new(
             self.webhook_secret.encode(),
-            body,
+            canonical,
             hashlib.sha256,
         ).hexdigest()
 
@@ -133,7 +140,7 @@ class N8NClient:
             payload = {**payload, "user_credentials": user_credentials}
 
         body = json.dumps(payload).encode()
-        signature = self._sign(body)
+        signature = self._sign(payload)
 
         try:
             response = await self._client.post(
