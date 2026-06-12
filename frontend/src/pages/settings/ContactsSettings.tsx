@@ -210,7 +210,7 @@ export function ContactsSettings() {
           <div className="space-y-2">
             {contacts.map((c) => (
               <div
-                key={c._id || c.value}
+                key={c.id || c.value}
                 className="flex items-center justify-between p-3 bg-midnight/40 rounded-xl border border-surface-highlight"
               >
                 <div className="min-w-0 flex-1">
@@ -238,9 +238,9 @@ export function ContactsSettings() {
                     </div>
                   )}
                 </div>
-                {c._id && (
+                {c.id && (
                   <button
-                    onClick={() => handleRemove(c._id!)}
+                    onClick={() => handleRemove(c.id!)}
                     className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     title="Eliminar"
                   >

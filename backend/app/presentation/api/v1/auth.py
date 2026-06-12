@@ -300,20 +300,8 @@ async def remove_my_contact(
 
 
 SERVICE_DEFINITIONS = {
-    "google_calendar": {
-        "label": "Google Calendar",
-        "credential_type": "api_key",
-        "fields": ["api_key"],
-        "metadata_fields": ["calendar_id"],
-        "description": "Permite a los agentes gestionar tu calendario de Google.",
-        "tools": [
-            "calendar_list_events",
-            "calendar_create_event",
-            "calendar_update_event",
-            "calendar_delete_event",
-            "calendar_check_availability",
-        ],
-    },
+    # NOTA: Google Calendar NO está aquí: se conecta vía OAuth (integrations/google),
+    # porque la Google Calendar API requiere un access_token OAuth2, no una api_key.
     "linkedin": {
         "label": "LinkedIn",
         "credential_type": "oauth_token",

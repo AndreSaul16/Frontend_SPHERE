@@ -43,6 +43,22 @@ _DEPLOY_LOCK_PATH = os.path.join(tempfile.gettempdir(), "sphere_n8n_deploy.lock"
 WORKFLOWS_DIR = Path(__file__).parents[2] / "infrastructure" / "n8n-workflows"
 
 
+def _workflow_differs(remote: dict, local: dict) -> bool:
+    """Compara el contenido relevante (nodes/connections/settings) de un workflow
+    remoto (n8n) contra el local (JSON del repo). Devuelve True si difiere.
+
+    Comparamos de forma normalizada (JSON ordenado por claves) y solo los campos
+    que controlamos; ignoramos metadatos read-only que n8n añade (id, position de
+    UI no se ignora porque va en nodes, pero un cambio de posición es inofensivo y
+    fuerza un update idempotente — aceptable)."""
+    for field in ("nodes", "connections", "settings"):
+        r = json.dumps(remote.get(field) or ([] if field == "nodes" else {}), sort_keys=True)
+        l = json.dumps(local.get(field) or ([] if field == "nodes" else {}), sort_keys=True)
+        if r != l:
+            return True
+    return False
+
+
 class N8NDeployer:
     """Despliega y sincroniza workflows de n8n via API REST."""
 
@@ -237,14 +253,23 @@ async def deploy_all_workflows():
                     # El workflow ya existe
                     workflow_id = existing["id"]
 
-                    # Verificar si está activo
-                    if not existing.get("active", False):
+                    # Sincronizar contenido si difiere (nodes/connections/settings).
+                    # Antes era un TODO → los cambios en los JSON nunca llegaban a n8n
+                    # (había que borrar el workflow a mano). Ahora se actualiza solo.
+                    full = await deployer.get_workflow(workflow_id) or existing
+                    if _workflow_differs(full, workflow_data):
+                        await deployer.update_workflow(workflow_id, workflow_data)
+                        updated += 1
+                        logger.info(f"🔄 Workflow actualizado (contenido difiere): {name}")
+                    else:
+                        skipped += 1
+                        logger.debug(f"⏭️ Workflow ya existe e idéntico: {name}")
+
+                    # Verificar si está activo (tras update puede requerir re-activación)
+                    refreshed = await deployer.get_workflow(workflow_id) or existing
+                    if not refreshed.get("active", False):
                         await deployer.activate_workflow(workflow_id)
                         activated += 1
-
-                    # TODO: Verificar si el contenido difiere y actualizar
-                    skipped += 1
-                    logger.debug(f"⏭️ Workflow ya existe: {name}")
 
                 else:
                     # Crear workflow nuevo

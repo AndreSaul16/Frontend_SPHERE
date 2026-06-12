@@ -551,7 +551,7 @@ export interface OAuthAppsList {
 }
 
 export interface Contact {
-    _id?: string;
+    id?: string;
     type: "email" | "phone" | "slack_channel" | "github_user" | "linkedin_handle";
     value: string;
     display_name?: string | null;
@@ -629,7 +629,7 @@ export const integrationsService = {
 
 export const contactsService = {
     list: () => req<Contact[]>("/me/contacts"),
-    add: (contact: Omit<Contact, "_id" | "added_at">) =>
+    add: (contact: Omit<Contact, "id" | "added_at">) =>
         req<Contact>("/me/contacts", { method: "POST", json: contact }),
     remove: (contactId: string) =>
         req<void>(`/me/contacts/${contactId}`, { method: "DELETE" }),

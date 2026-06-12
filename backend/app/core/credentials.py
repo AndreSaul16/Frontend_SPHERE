@@ -273,6 +273,30 @@ class CredentialsService:
                         )
                         return data["access_token"]
 
+            elif provider == "google":
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(
+                        "https://oauth2.googleapis.com/token",
+                        data={
+                            "grant_type": "refresh_token",
+                            "refresh_token": refresh_token,
+                            "client_id": app["client_id"],
+                            "client_secret": app["client_secret"],
+                        },
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    if data.get("access_token"):
+                        # Google no reemite refresh_token en el refresh: conservamos el actual.
+                        await self.store_token(
+                            user_id,
+                            provider,
+                            access_token=data["access_token"],
+                            refresh_token=refresh_token,
+                            expires_in=data.get("expires_in"),
+                        )
+                        return data["access_token"]
+
         except Exception as e:
             logger.error(f"Error refrescando token {provider}: {e}")
             return None
@@ -513,9 +537,22 @@ class CredentialsService:
         """
         Carga credenciales de múltiples servicios para inyectar en payloads de n8n.
         Retorna dict: {"google_calendar": {"api_key": "...", ...}, ...}
+
+        Caso especial google_calendar: Google Calendar API necesita un access_token
+        OAuth2 (no una api_key). Si el usuario conectó Google vía OAuth, usamos su
+        token (auto-refrescado) como `api_key` para el workflow (que hace Bearer
+        {api_key}). Si no hay OAuth, caemos al service-credential api_key (compat).
         """
         result = {}
         for service in services:
+            if service == "google_calendar":
+                token = await self.get_token(user_id, "google")
+                if token:
+                    # Conservar calendar_id del service-credential si existe.
+                    sc = await self.get_service_credential_with_metadata(user_id, service)
+                    metadata = (sc or {}).get("metadata", {}) if sc else {}
+                    result[service] = {"api_key": token, **metadata}
+                    continue
             cred = await self.get_service_credential_with_metadata(user_id, service)
             if cred:
                 result[service] = {

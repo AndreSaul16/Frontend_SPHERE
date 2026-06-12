@@ -70,11 +70,14 @@ async def is_authorized(
 
 
 async def list_contacts(user_id: str) -> list[dict]:
-    """Lista todos los contactos del usuario."""
+    """Lista todos los contactos del usuario.
+
+    Conserva `_id` (ObjectId) para que el endpoint pueda exponerlo como `id`
+    y el frontend pueda borrar el contacto. Antes se hacía pop("_id") → el id
+    llegaba vacío y el botón de borrar no funcionaba."""
     col = get_contacts_collection()
     contacts = []
     async for c in col.find({"user_id": user_id}).sort("added_at", -1):
-        c.pop("_id", None)
         c.pop("user_id", None)
         contacts.append(c)
     return contacts
@@ -112,15 +115,23 @@ async def add_contact(
         upsert=True,
     )
 
-    doc.pop("_id", None)
-    return doc
+    # Releer el documento para devolver su `_id` real (necesario para que el
+    # frontend pueda borrarlo). El upsert no devuelve el doc completo.
+    saved = await col.find_one(
+        {"user_id": user_id, "type": contact_type, "value": normalized}
+    )
+    return saved or doc
 
 
 async def remove_contact(user_id: str, contact_id: str):
-    """Elimina un contacto de la whitelist."""
+    """Elimina un contacto de la whitelist. Tolera ids malformados (no 500)."""
     from bson import ObjectId
+    from bson.errors import InvalidId
+
+    try:
+        oid = ObjectId(contact_id)
+    except (InvalidId, TypeError):
+        return False
     col = get_contacts_collection()
-    result = await col.delete_one(
-        {"_id": ObjectId(contact_id), "user_id": user_id}
-    )
+    result = await col.delete_one({"_id": oid, "user_id": user_id})
     return result.deleted_count > 0

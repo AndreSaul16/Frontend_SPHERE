@@ -9,6 +9,7 @@ import {
   Github,
   FileText,
   Slack as SlackIcon,
+  Calendar,
   Link2,
   Unlink,
   CheckCircle2,
@@ -56,6 +57,14 @@ const PROVIDER_META: Record<
     description: "Permite enviar mensajes a canales autorizados.",
     createUrl: "https://api.slack.com/apps",
     createHint: "Slack API → Create New App → OAuth & Permissions",
+  },
+  google: {
+    label: "Google Calendar",
+    icon: <Calendar className="h-6 w-6" />,
+    description: "Permite a tus agentes crear, listar y gestionar eventos en tu Google Calendar.",
+    createUrl: "https://console.cloud.google.com/apis/credentials",
+    createHint:
+      "Google Cloud Console → APIs & Services → Credentials → Create OAuth client ID (tipo: Web). Habilita la Google Calendar API y añade la Callback URL de abajo a los 'Authorized redirect URIs'.",
   },
 };
 

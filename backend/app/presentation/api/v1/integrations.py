@@ -25,6 +25,7 @@ PROVIDERS = {
     "github": __import__("app.infrastructure.integrations.providers.github", fromlist=["github"]),
     "notion": __import__("app.infrastructure.integrations.providers.notion", fromlist=["notion"]),
     "slack": __import__("app.infrastructure.integrations.providers.slack", fromlist=["slack"]),
+    "google": __import__("app.infrastructure.integrations.providers.google", fromlist=["google"]),
 }
 
 
