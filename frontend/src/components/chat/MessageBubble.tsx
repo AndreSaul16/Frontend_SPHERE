@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import rehypeSanitize from 'rehype-sanitize';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -294,6 +295,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                                         parts.push(
                                             <ReactMarkdown
                                                 key={`text-${partKey++}`}
+                                                remarkPlugins={[remarkGfm]}
                                                 rehypePlugins={[rehypeSanitize, rehypeHighlight]}
                                                 components={markdownComponents}
                                             >
@@ -391,6 +393,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                                     parts.push(
                                         <ReactMarkdown
                                             key={`text-${partKey++}`}
+                                            remarkPlugins={[remarkGfm]}
                                             rehypePlugins={[rehypeSanitize, rehypeHighlight]}
                                             components={markdownComponents}
                                         >
@@ -404,6 +407,7 @@ export function MessageBubble({ message, agent, agentColor, sessionAvatar, isTyp
                             if (parts.length === 0) {
                                 return (
                                     <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
                                         rehypePlugins={[rehypeSanitize, rehypeHighlight]}
                                         components={markdownComponents}
                                     >
