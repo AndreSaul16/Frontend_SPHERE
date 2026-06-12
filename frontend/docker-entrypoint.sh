@@ -9,7 +9,7 @@ echo "HOME=$HOME"
 echo "PWD=$(pwd)"
 
 echo "=== Processing nginx template ==="
-envsubst '${PORT} ${VITE_API_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+envsubst '${PORT} ${VITE_API_URL} ${BACKEND_PRIVATE_URL}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
 
 echo "=== Generated nginx config ==="
 cat /etc/nginx/conf.d/default.conf
