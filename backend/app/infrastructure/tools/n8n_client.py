@@ -153,7 +153,19 @@ class N8NClient:
                 timeout=timeout,
             )
             response.raise_for_status()
-            return response.json()
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                logger.error(
+                    f"n8n responded with non-JSON body (status {response.status_code}): "
+                    f"{response.text[:300]}"
+                )
+                return {
+                    "error": True,
+                    "service": "n8n",
+                    "message": "n8n returned non-JSON response",
+                    "details": response.text[:500],
+                }
 
         except httpx.TimeoutException:
             logger.error(f"Timeout llamando n8n webhook: {url}")
