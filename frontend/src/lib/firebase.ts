@@ -3,7 +3,7 @@
  * Config values from VITE_FIREBASE_* env vars.
  */
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, GithubAuthProvider, browserSessionPersistence, setPersistence } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, GithubAuthProvider, OAuthProvider, browserSessionPersistence, setPersistence } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,4 +19,5 @@ export const auth = getAuth(app);
 setPersistence(auth, browserSessionPersistence);
 export const googleProvider = new GoogleAuthProvider();
 export const githubProvider = new GithubAuthProvider();
+export const microsoftProvider = new OAuthProvider('microsoft.com');
 export default app;

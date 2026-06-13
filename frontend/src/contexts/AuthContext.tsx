@@ -19,7 +19,7 @@ import {
   sendEmailVerification,
   type User as FirebaseUser,
 } from "firebase/auth";
-import { auth, googleProvider, githubProvider } from "@/lib/firebase";
+import { auth, googleProvider, githubProvider, microsoftProvider } from "@/lib/firebase";
 
 interface AuthUser {
   uid: string;
@@ -38,6 +38,7 @@ interface AuthContextType {
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithGithub: () => Promise<void>;
+  signInWithMicrosoft: () => Promise<void>;
   signOut: () => Promise<void>;
   resendVerification: () => Promise<void>;
   reloadUser: () => Promise<boolean>; // devuelve emailVerified tras refrescar
@@ -133,6 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithPopup(auth, githubProvider);
   }, []);
 
+  const signInWithMicrosoft = useCallback(async () => {
+    await signInWithPopup(auth, microsoftProvider);
+  }, []);
+
   const signOut = useCallback(async () => {
     await firebaseSignOut(auth);
     setUser(null);
@@ -152,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUpWithEmail,
         signInWithGoogle,
         signInWithGithub,
+        signInWithMicrosoft,
         signOut,
         resendVerification,
         reloadUser,

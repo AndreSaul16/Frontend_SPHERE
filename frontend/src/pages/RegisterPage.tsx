@@ -1,6 +1,7 @@
 /**
- * Página de Login.
- * Email + Password + Google + GitHub + Microsoft social buttons.
+ * Página de Registro dedicada.
+ * Email + Password + Google + GitHub + Microsoft social sign-up.
+ * Redirige a /verify-email tras registro email/password.
  */
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
@@ -12,39 +13,50 @@ const SOCIAL_LABELS: Record<string, string> = {
   microsoft: "Microsoft",
 };
 
-export function LoginPage() {
+export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { signInWithEmail, signInWithGoogle, signInWithGithub, signInWithMicrosoft } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signInWithGithub, signInWithMicrosoft } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (password !== confirmPassword) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await signInWithEmail(email, password);
-      navigate("/");
+      await signUpWithEmail(email, password);
+      navigate("/verify-email");
     } catch (err: any) {
       const code = err?.code || "";
       const messages: Record<string, string> = {
-        "auth/user-not-found": "Usuario no encontrado",
-        "auth/wrong-password": "Contraseña incorrecta",
+        "auth/email-already-in-use": "Este email ya está registrado",
+        "auth/weak-password": "La contraseña debe tener al menos 6 caracteres",
         "auth/invalid-email": "Email inválido",
-        "auth/invalid-credential": "Credenciales inválidas",
         "auth/too-many-requests": "Demasiados intentos. Intenta más tarde.",
       };
-      setError(messages[code] || "Error de autenticación. Intenta de nuevo.");
+      setError(messages[code] || "Error al crear la cuenta. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSocialLogin = async (provider: "google" | "github" | "microsoft") => {
+  const handleSocialSignUp = async (provider: "google" | "github" | "microsoft") => {
     setError(null);
     setLoading(true);
     try {
@@ -60,7 +72,7 @@ export function LoginPage() {
       if (err?.code === "auth/popup-closed-by-user") {
         setError("Ventana cerrada. Intenta de nuevo.");
       } else {
-        setError("Error con el login social. Intenta de nuevo.");
+        setError("Error con el registro social. Intenta de nuevo.");
       }
     } finally {
       setLoading(false);
@@ -76,14 +88,14 @@ export function LoginPage() {
             SPHERE
           </h1>
           <p className="text-gray-400 mt-2">
-            Tu equipo ejecutivo de IA, siempre listo.
+            Crea tu cuenta y empezá a usar tu equipo ejecutivo de IA.
           </p>
         </div>
 
         {/* Card */}
         <div className="bg-gray-800/60 backdrop-blur-xl rounded-2xl p-8 shadow-2xl border border-gray-700/50">
           <h2 className="text-xl font-semibold text-white mb-6 text-center">
-            Iniciar sesión
+            Crear cuenta
           </h2>
 
           {error && (
@@ -119,20 +131,33 @@ export function LoginPage() {
                 disabled={loading}
               />
             </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Confirmar contraseña</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-900/50 border border-gray-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                placeholder="••••••••"
+                required
+                minLength={6}
+                disabled={loading}
+              />
+            </div>
 
             <button
               type="submit"
               disabled={loading}
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Cargando..." : "Iniciar sesión"}
+              {loading ? "Creando cuenta..." : "Crear cuenta"}
             </button>
           </form>
 
           {/* Divider */}
           <div className="my-6 flex items-center">
             <div className="flex-1 border-t border-gray-600"></div>
-            <span className="px-4 text-sm text-gray-500">o continúa con</span>
+            <span className="px-4 text-sm text-gray-500">o registrate con</span>
             <div className="flex-1 border-t border-gray-600"></div>
           </div>
 
@@ -141,28 +166,28 @@ export function LoginPage() {
             <SocialButton
               provider="google"
               loading={loading}
-              onClick={() => handleSocialLogin("google")}
+              onClick={() => handleSocialSignUp("google")}
             />
             <SocialButton
               provider="github"
               loading={loading}
-              onClick={() => handleSocialLogin("github")}
+              onClick={() => handleSocialSignUp("github")}
             />
             <SocialButton
               provider="microsoft"
               loading={loading}
-              onClick={() => handleSocialLogin("microsoft")}
+              onClick={() => handleSocialSignUp("microsoft")}
             />
           </div>
 
-          {/* Link to Register */}
+          {/* Link to Login */}
           <p className="mt-6 text-center text-sm text-gray-400">
-            ¿No tienes cuenta?{" "}
+            ¿Ya tienes cuenta?{" "}
             <Link
-              to="/register"
+              to="/login"
               className="text-purple-400 hover:text-purple-300 font-medium"
             >
-              Crea una cuenta
+              Inicia sesión
             </Link>
           </p>
         </div>
@@ -171,7 +196,7 @@ export function LoginPage() {
   );
 }
 
-/** Botón de login social con icono inline. */
+/** Botón de registro social con icono inline. */
 function SocialButton({
   provider,
   loading,
